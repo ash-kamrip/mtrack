@@ -18,14 +18,45 @@ class TransactionItem extends StatelessWidget {
     required this.label,
   });
 
+  Color _getLabelColor(String label) {
+    switch (label.toLowerCase()) {
+      case 'food':
+        return Colors.green.shade100;
+      case 'income':
+        return Colors.yellow.shade100;
+      case 'transport':
+        return Colors.blue.shade100;
+      case 'shopping':
+        return Colors.purple.shade100;
+      default:
+        return Colors.grey.shade200;
+    }
+  }
+
+  Color _getLabelTextColor(String label) {
+    switch (label.toLowerCase()) {
+      case 'food':
+        return Colors.green.shade900;
+      case 'income':
+        return Colors.yellow.shade900;
+      case 'transport':
+        return Colors.blue.shade900;
+      case 'shopping':
+        return Colors.purple.shade900;
+      default:
+        return Colors.black87;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
           backgroundColor: isIncome ? Colors.green[50] : Colors.red[50],
           child: Icon(
-            isIncome ? Icons.arrow_upward : Icons.arrow_downward,
+            isIncome ? Icons.trending_up : Icons.trending_down,
             color: isIncome ? Colors.green : Colors.red,
           ),
         ),
@@ -36,24 +67,37 @@ class TransactionItem extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Colors.black,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               Row(
                 children: [
-                  Text(time, style: TextStyle(color: Colors.grey)),
+                  Text(
+                    time,
+                    style: TextStyle(color: Colors.grey, fontSize: 15),
+                  ),
                   if (label.isNotEmpty)
                     Container(
                       margin: EdgeInsets.only(left: 8),
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.yellow[100],
-                        borderRadius: BorderRadius.circular(8),
+                        color: _getLabelColor(label),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         label,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
+                          color: _getLabelTextColor(label),
                         ),
                       ),
                     ),
@@ -67,7 +111,7 @@ class TransactionItem extends StatelessWidget {
           style: TextStyle(
             color: isIncome ? Colors.green : Colors.red,
             fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontSize: 18,
           ),
         ),
       ],

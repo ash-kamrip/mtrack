@@ -3,6 +3,7 @@ import 'widgets/transaction.dart';
 import 'widgets/add_transaction_dialog.dart';
 import 'widgets/recent_transactions_section.dart';
 import 'widgets/transaction_item.dart';
+import 'widgets/analytics_view.dart';
 
 void main() {
   runApp(MTrackApp());
@@ -49,6 +50,8 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   ];
 
+  int _selectedTab = 0;
+
   void _showAddTransactionDialog() async {
     final Transaction? newTx = await showDialog<Transaction>(
       context: context,
@@ -59,6 +62,12 @@ class _HomeScreenState extends State<HomeScreen> {
         _transactions.insert(0, newTx);
       });
     }
+  }
+
+  void _onTabChanged(int index) {
+    setState(() {
+      _selectedTab = index;
+    });
   }
 
   @override
@@ -102,12 +111,17 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const MonthlySpendsCard(),
               SizedBox(height: 20),
-              const TransactionsAnalyticsTabs(),
-              SizedBox(height: 20),
-              RecentTransactionsSection(
-                transactions: _transactions,
-                onAddTransaction: _showAddTransactionDialog,
+              TransactionsAnalyticsTabs(
+                selectedIndex: _selectedTab,
+                onTabChanged: _onTabChanged,
               ),
+              SizedBox(height: 20),
+              if (_selectedTab == 0)
+                RecentTransactionsSection(
+                  transactions: _transactions,
+                  onAddTransaction: _showAddTransactionDialog,
+                ),
+              if (_selectedTab == 1) AnalyticsView(transactions: _transactions),
             ],
           ),
         ),
@@ -181,16 +195,14 @@ class MonthlySpendsCard extends StatelessWidget {
   }
 }
 
-class TransactionsAnalyticsTabs extends StatefulWidget {
-  const TransactionsAnalyticsTabs({super.key});
-
-  @override
-  _TransactionsAnalyticsTabsState createState() =>
-      _TransactionsAnalyticsTabsState();
-}
-
-class _TransactionsAnalyticsTabsState extends State<TransactionsAnalyticsTabs> {
-  int selectedIndex = 0;
+class TransactionsAnalyticsTabs extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onTabChanged;
+  const TransactionsAnalyticsTabs({
+    super.key,
+    this.selectedIndex = 0,
+    required this.onTabChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -198,7 +210,7 @@ class _TransactionsAnalyticsTabsState extends State<TransactionsAnalyticsTabs> {
       children: [
         Expanded(
           child: GestureDetector(
-            onTap: () => setState(() => selectedIndex = 0),
+            onTap: () => onTabChanged(0),
             child: Container(
               padding: EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
@@ -221,7 +233,7 @@ class _TransactionsAnalyticsTabsState extends State<TransactionsAnalyticsTabs> {
         ),
         Expanded(
           child: GestureDetector(
-            onTap: () => setState(() => selectedIndex = 1),
+            onTap: () => onTabChanged(1),
             child: Container(
               padding: EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
