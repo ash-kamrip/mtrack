@@ -65,9 +65,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onTabChanged(int index) {
-    setState(() {
-      _selectedTab = index;
-    });
+    if (_selectedTab == index && index == 0) {
+      // Already on Transactions tab, navigate to all transactions
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AllTransactionsScreen(transactions: _transactions),
+        ),
+      );
+    } else {
+      setState(() {
+        _selectedTab = index;
+      });
+    }
   }
 
   @override
@@ -120,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 RecentTransactionsSection(
                   transactions: _transactions,
                   onAddTransaction: _showAddTransactionDialog,
+                  showOnlyTop: 10,
                 ),
               if (_selectedTab == 1) AnalyticsView(transactions: _transactions),
             ],

@@ -19,6 +19,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     'Travel',
     'Salary',
     'Other',
+    'Transport',
   ];
 
   @override
@@ -111,6 +112,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                       .toList(),
                   onChanged: (val) => setState(() => _category = val ?? ''),
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return 'Select a category';
+                    return null;
+                  },
                 ),
                 SizedBox(height: 16),
                 Container(
