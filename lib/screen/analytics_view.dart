@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'transaction.dart';
+import '../widgets/transaction.dart';
 import 'dart:math';
 
 class AnalyticsView extends StatefulWidget {
@@ -239,7 +239,7 @@ class _AnalyticsViewState extends State<AnalyticsView> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

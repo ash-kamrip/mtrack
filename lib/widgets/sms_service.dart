@@ -3,7 +3,7 @@ import 'transaction.dart';
 
 class SmsService {
   Future<List<SmsMessage>> readMessages() async {
-    SmsQuery query = new SmsQuery();
+    SmsQuery query = SmsQuery();
     List<SmsMessage> smsMessages = await query.getAllSms;
     return smsMessages.where((message) {
       String body = message.body ?? '';

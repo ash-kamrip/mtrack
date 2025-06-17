@@ -38,11 +38,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Add New Transaction',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
+                    Expanded(
+                      child: Text(
+                        'Add New Transaction',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                        ),
                       ),
                     ),
                     IconButton(

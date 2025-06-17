@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'widgets/transaction.dart';
 import 'widgets/add_transaction_dialog.dart';
 import 'widgets/recent_transactions_section.dart';
-import 'widgets/analytics_view.dart';
+import 'screen/analytics_view.dart';
 // --- sms related imports
 import 'package:permission_handler/permission_handler.dart';
 import 'widgets/sms_service.dart';
@@ -10,9 +10,10 @@ import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'package:logger/logger.dart';
 import 'widgets/transaction_helpers.dart';
 // --- sms related imports - END
+import 'screen/profile_screen.dart';
 
 void main() {
-  runApp(MTrackApp());
+  runApp(const MTrackApp());
 }
 
 class MTrackApp extends StatelessWidget {
@@ -22,22 +23,29 @@ class MTrackApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MTrack',
-      theme: ThemeData(primarySwatch: Colors.green, fontFamily: 'Inter'),
-      home: HomeScreen(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
-
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'User Profile',
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.green,
+        fontFamily: 'Inter',
+        cardTheme: CardThemeData(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+          ),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.black),
+          titleTextStyle: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
+        ),
       ),
+      home: const HomeScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -114,10 +122,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final allTransactions = [..._smsTransactions]
       ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
     final latest10 = getLatestTransactions(allTransactions, count: 10);
+    // add few manual transactions
+    allTransactions.add(
+      Transaction(
+        amount: 100,
+        dateTime: DateTime.now(),
+        description: 'Manual Transaction',
+        type: 'Debit',
+        category: 'Food',
+        source: 'Manual',
+      ),
+    );
     final currentMonthTxs = getCurrentMonthTransactions(allTransactions);
     final currentMonthDebits = getDebits(currentMonthTxs);
     final currentMonthCredits = getCredits(currentMonthTxs);
     final totalDebits = getDebits(currentMonthTxs);
+    final colorScheme = Theme.of(context).colorScheme;
 
     Widget body;
     switch (_selectedTab) {
@@ -132,11 +152,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   totalDebits: totalDebits,
                   currentMonthCredits: currentMonthCredits,
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 RecentTransactionsSection(
                   transactions: latest10,
                   onAddTransaction: _showAddTransactionDialog,
                   showOnlyTop: 10,
+                  titleTextStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  amountTextStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                  verticalSpacing: 10,
+                  buttonPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),
               ],
             ),
@@ -162,56 +192,65 @@ class _HomeScreenState extends State<HomeScreen> {
         body = Container();
     }
     return Scaffold(
-      backgroundColor: Color(0xFFF6FAFF),
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
           child: CircleAvatar(
-            backgroundColor: Color(0xFF4CB8C4),
-            child: Icon(Icons.account_balance_wallet, color: Colors.white),
+            backgroundColor: colorScheme.primaryContainer,
+            child: Icon(
+              Icons.account_balance_wallet,
+              color: colorScheme.primary,
+            ),
           ),
         ),
         title: Text(
           'MTrack',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF4CB8C4), Color(0xFF3CD3AD)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+          style: TextStyle(
+            color: colorScheme.primary,
+            fontWeight: FontWeight.bold,
           ),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.settings, color: Colors.black),
+            icon: const Icon(Icons.settings),
+            color: colorScheme.primary,
             onPressed: () {},
+            tooltip: 'Settings',
           ),
         ],
       ),
       body: body,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedTab,
-        onTap: _onBottomNavChanged,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.analytics),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedTab,
+        onDestinationSelected: (index) => setState(() => _selectedTab = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
             label: 'Analytics',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.list_alt),
+          NavigationDestination(
+            icon: Icon(Icons.list_alt_outlined),
+            selectedIcon: Icon(Icons.list_alt),
             label: 'Transactions',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
+        height: 70,
+        backgroundColor: Colors.white,
+        indicatorColor: Colors.green.shade50,
       ),
     );
   }
@@ -230,18 +269,31 @@ class MonthlySpendsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+      elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            Text(
-              'Monthly Spends',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.trending_up, color: colorScheme.primary, size: 28),
+                const SizedBox(width: 8),
+                Text(
+                  'Monthly Spends',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Stack(
               alignment: Alignment.center,
               children: [
@@ -253,38 +305,23 @@ class MonthlySpendsCard extends StatelessWidget {
                         ? 0
                         : (currentMonthDebits / totalDebits).clamp(0.0, 1.0),
                     strokeWidth: 10,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                    backgroundColor: colorScheme.surface,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      colorScheme.primary,
+                    ),
                   ),
                 ),
                 Text(
                   '₹${currentMonthDebits.toInt()}',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 28),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Text(
-                  '+ ₹${currentMonthCredits.toInt()}',
                   style: TextStyle(
-                    color: Colors.green,
                     fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                Text(
-                  '- ₹${currentMonthDebits.toInt()}',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                    fontSize: 32,
+                    color: colorScheme.primary,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
           ],
         ),
       ),

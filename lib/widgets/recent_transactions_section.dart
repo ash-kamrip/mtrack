@@ -7,11 +7,19 @@ class RecentTransactionsSection extends StatelessWidget {
   final List<Transaction> transactions;
   final VoidCallback onAddTransaction;
   final int? showOnlyTop;
+  final TextStyle? amountTextStyle;
+  final TextStyle? titleTextStyle;
+  final double verticalSpacing;
+  final EdgeInsetsGeometry? buttonPadding;
   const RecentTransactionsSection({
     super.key,
     required this.transactions,
     required this.onAddTransaction,
     this.showOnlyTop,
+    this.titleTextStyle,
+    this.amountTextStyle,
+    this.verticalSpacing = 8,
+    this.buttonPadding,
   });
 
   Map<String, List<Transaction>> _groupByDate(List<Transaction> txs) {
@@ -49,51 +57,66 @@ class RecentTransactionsSection extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Recent Transactions',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: onAddTransaction,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
                     ),
                   ),
-                  child: Text(
-                    '+ Add Transaction',
-                    style: TextStyle(color: Colors.white),
+                ),
+                Padding(
+                  padding:
+                      buttonPadding ?? const EdgeInsets.symmetric(vertical: 6),
+                  child: ElevatedButton(
+                    onPressed: onAddTransaction,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    child: const Text(
+                      '+ Add Transaction',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 12),
             ...sortedKeys.map(
               (dateStr) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(vertical: 6.0),
                     child: Text(
                       dateStr,
-                      style: TextStyle(
-                        color: Colors.grey[600],
+                      style: const TextStyle(
+                        color: Colors.grey,
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 13,
                       ),
                     ),
                   ),
                   ...grouped[dateStr]!.map(
-                    (tx) => Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: TransactionItem(
-                        isIncome: tx.type == 'Credit',
-                        title: tx.description,
-                        time: DateFormat('hh:mm a').format(tx.dateTime),
-                        amount: tx.amount.toInt(),
-                        date: dateStr,
-                        label: tx.category,
-                      ),
+                    (tx) => TransactionItem(
+                      isIncome: tx.type == 'Credit',
+                      title: tx.description,
+                      time: DateFormat('hh:mm a').format(tx.dateTime),
+                      amount: tx.amount.toInt(),
+                      date: dateStr,
+                      label: tx.category,
+                      amountTextStyle:
+                          amountTextStyle ??
+                          const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                      verticalSpacing: verticalSpacing,
                     ),
                   ),
                 ],
