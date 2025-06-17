@@ -3,6 +3,13 @@ import 'widgets/transaction.dart';
 import 'widgets/add_transaction_dialog.dart';
 import 'widgets/recent_transactions_section.dart';
 import 'widgets/analytics_view.dart';
+// --- sms related imports
+import 'package:permission_handler/permission_handler.dart';
+import 'widgets/sms_service.dart';
+import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
+import 'package:logger/logger.dart';
+import 'widgets/transaction_helpers.dart';
+// --- sms related imports - END
 
 void main() {
   runApp(MTrackApp());
@@ -43,26 +50,46 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<Transaction> _transactions = [
-    Transaction(
-      type: 'Credit',
-      amount: 10000,
-      description: 'salary',
-      category: 'Income',
-      source: 'Manual',
-      dateTime: DateTime(2025, 6, 16, 1, 33),
-    ),
-    Transaction(
-      type: 'Debit',
-      amount: 250,
-      description: 'ice cream',
-      category: '',
-      source: 'Manual',
-      dateTime: DateTime(2025, 6, 16, 1, 33),
-    ),
-  ];
+  // --- SMS related variables ---
+  List<SmsMessage> messages = [];
+  final SmsService _smsService = SmsService();
+  List<Transaction> _smsTransactions = [];
+  final Logger _logger = Logger();
+  // --- END SMS related variables ---
 
+  // --- UI State ---
   int _selectedTab = 0;
+  // --- END UI State ---
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions();
+  }
+
+  // --- SMS and Permissions Logic ---
+  Future<void> _requestPermissions() async {
+    var status = await Permission.sms.request();
+    if (status.isGranted) {
+      _readMessages();
+    } else {
+      _logger.w('Permission denied');
+    }
+  }
+
+  Future<void> _readMessages() async {
+    messages = await _smsService.readMessages();
+    _smsTransactions = _smsService.parseTransactionsFromMessages(messages);
+    // Log the first 5 messages for debugging
+    for (var i = 0; i < (messages.length < 5 ? messages.length : 5); i++) {
+      final msg = messages[i];
+      _logger.i(
+        'SMS #$i: address=${msg.address}, date=${msg.date}, body=${msg.body}',
+      );
+    }
+    setState(() {});
+  }
+  // --- END SMS and Permissions Logic ---
 
   void _showAddTransactionDialog() async {
     final Transaction? newTx = await showDialog<Transaction>(
@@ -71,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (newTx != null) {
       setState(() {
-        _transactions.insert(0, newTx);
+        _smsTransactions.insert(0, newTx);
       });
     }
   }
@@ -84,26 +111,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final currentMonthDebits = _transactions
-        .where(
-          (tx) =>
-              tx.type == 'Debit' &&
-              tx.dateTime.month == now.month &&
-              tx.dateTime.year == now.year,
-        )
-        .fold<double>(0, (sum, tx) => sum + tx.amount);
-    final currentMonthCredits = _transactions
-        .where(
-          (tx) =>
-              tx.type == 'Credit' &&
-              tx.dateTime.month == now.month &&
-              tx.dateTime.year == now.year,
-        )
-        .fold<double>(0, (sum, tx) => sum + tx.amount);
-    final totalDebits = _transactions
-        .where((tx) => tx.type == 'Debit')
-        .fold<double>(0, (sum, tx) => sum + tx.amount);
+    final allTransactions = [..._smsTransactions]
+      ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    final latest10 = getLatestTransactions(allTransactions, count: 10);
+    final currentMonthTxs = getCurrentMonthTransactions(allTransactions);
+    final currentMonthDebits = getDebits(currentMonthTxs);
+    final currentMonthCredits = getCredits(currentMonthTxs);
+    final totalDebits = getDebits(currentMonthTxs);
 
     Widget body;
     switch (_selectedTab) {
@@ -120,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 SizedBox(height: 20),
                 RecentTransactionsSection(
-                  transactions: _transactions,
+                  transactions: latest10,
                   onAddTransaction: _showAddTransactionDialog,
                   showOnlyTop: 10,
                 ),
@@ -130,15 +144,16 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         break;
       case 1:
+        // TODO: Fix AnalyticsView to support user-selected time periods
         body = SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: AnalyticsView(transactions: _transactions),
+            child: AnalyticsView(transactions: allTransactions),
           ),
         );
         break;
       case 2:
-        body = AllTransactionsScreen(transactions: _transactions);
+        body = AllTransactionsScreen(transactions: allTransactions);
         break;
       case 3:
         body = const ProfileScreen();
