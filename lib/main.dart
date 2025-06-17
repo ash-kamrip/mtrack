@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'widgets/transaction.dart';
 import 'widgets/add_transaction_dialog.dart';
 import 'widgets/recent_transactions_section.dart';
-import 'widgets/transaction_item.dart';
 import 'widgets/analytics_view.dart';
 
 void main() {
@@ -19,6 +18,19 @@ class MTrackApp extends StatelessWidget {
       theme: ThemeData(primarySwatch: Colors.green, fontFamily: 'Inter'),
       home: HomeScreen(),
       debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        'User Profile',
+        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      ),
     );
   }
 }
@@ -64,23 +76,51 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _onTabChanged(int index) {
-    if (_selectedTab == index && index == 0) {
-      // Already on Transactions tab, navigate to all transactions
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AllTransactionsScreen(transactions: _transactions),
-        ),
-      );
-    } else {
-      setState(() {
-        _selectedTab = index;
-      });
-    }
+  void _onBottomNavChanged(int index) {
+    setState(() {
+      _selectedTab = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    Widget body;
+    switch (_selectedTab) {
+      case 0:
+        body = SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                const MonthlySpendsCard(),
+                SizedBox(height: 20),
+                RecentTransactionsSection(
+                  transactions: _transactions,
+                  onAddTransaction: _showAddTransactionDialog,
+                  showOnlyTop: 10,
+                ),
+              ],
+            ),
+          ),
+        );
+        break;
+      case 1:
+        body = SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: AnalyticsView(transactions: _transactions),
+          ),
+        );
+        break;
+      case 2:
+        body = AllTransactionsScreen(transactions: _transactions);
+        break;
+      case 3:
+        body = const ProfileScreen();
+        break;
+      default:
+        body = Container();
+    }
     return Scaffold(
       backgroundColor: Color(0xFFF6FAFF),
       appBar: AppBar(
@@ -113,28 +153,25 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              const MonthlySpendsCard(),
-              SizedBox(height: 20),
-              TransactionsAnalyticsTabs(
-                selectedIndex: _selectedTab,
-                onTabChanged: _onTabChanged,
-              ),
-              SizedBox(height: 20),
-              if (_selectedTab == 0)
-                RecentTransactionsSection(
-                  transactions: _transactions,
-                  onAddTransaction: _showAddTransactionDialog,
-                  showOnlyTop: 10,
-                ),
-              if (_selectedTab == 1) AnalyticsView(transactions: _transactions),
-            ],
+      body: body,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedTab,
+        onTap: _onBottomNavChanged,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.black,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.analytics),
+            label: 'Analytics',
           ),
-        ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list_alt),
+            label: 'Transactions',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
       ),
     );
   }
@@ -201,70 +238,6 @@ class MonthlySpendsCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class TransactionsAnalyticsTabs extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onTabChanged;
-  const TransactionsAnalyticsTabs({
-    super.key,
-    this.selectedIndex = 0,
-    required this.onTabChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onTabChanged(0),
-            child: Container(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: selectedIndex == 0 ? Colors.white : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.chat_bubble_outline, color: Colors.black54),
-                  SizedBox(width: 8),
-                  Text(
-                    'Transactions',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onTabChanged(1),
-            child: Container(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: selectedIndex == 1 ? Colors.white : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.analytics_outlined, color: Colors.black54),
-                  SizedBox(width: 8),
-                  Text(
-                    'Analytics',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
