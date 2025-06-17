@@ -84,6 +84,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final currentMonthDebits = _transactions
+        .where(
+          (tx) =>
+              tx.type == 'Debit' &&
+              tx.dateTime.month == now.month &&
+              tx.dateTime.year == now.year,
+        )
+        .fold<double>(0, (sum, tx) => sum + tx.amount);
+    final currentMonthCredits = _transactions
+        .where(
+          (tx) =>
+              tx.type == 'Credit' &&
+              tx.dateTime.month == now.month &&
+              tx.dateTime.year == now.year,
+        )
+        .fold<double>(0, (sum, tx) => sum + tx.amount);
+    final totalDebits = _transactions
+        .where((tx) => tx.type == 'Debit')
+        .fold<double>(0, (sum, tx) => sum + tx.amount);
+
     Widget body;
     switch (_selectedTab) {
       case 0:
@@ -92,7 +113,11 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                const MonthlySpendsCard(),
+                MonthlySpendsCard(
+                  currentMonthDebits: currentMonthDebits,
+                  totalDebits: totalDebits,
+                  currentMonthCredits: currentMonthCredits,
+                ),
                 SizedBox(height: 20),
                 RecentTransactionsSection(
                   transactions: _transactions,
@@ -178,7 +203,15 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class MonthlySpendsCard extends StatelessWidget {
-  const MonthlySpendsCard({super.key});
+  final double currentMonthDebits;
+  final double totalDebits;
+  final double currentMonthCredits;
+  const MonthlySpendsCard({
+    super.key,
+    required this.currentMonthDebits,
+    required this.totalDebits,
+    required this.currentMonthCredits,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -201,14 +234,16 @@ class MonthlySpendsCard extends StatelessWidget {
                   width: 120,
                   height: 120,
                   child: CircularProgressIndicator(
-                    value: 0.5,
+                    value: totalDebits == 0
+                        ? 0
+                        : (currentMonthDebits / totalDebits).clamp(0.0, 1.0),
                     strokeWidth: 10,
                     backgroundColor: Colors.grey[200],
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                   ),
                 ),
                 Text(
-                  '₹250',
+                  '₹${currentMonthDebits.toInt()}',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 28),
                 ),
               ],
@@ -218,7 +253,7 @@ class MonthlySpendsCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Text(
-                  '+ ₹10,000',
+                  '+ ₹${currentMonthCredits.toInt()}',
                   style: TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
@@ -226,7 +261,7 @@ class MonthlySpendsCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '- ₹250',
+                  '- ₹${currentMonthDebits.toInt()}',
                   style: TextStyle(
                     color: Colors.red,
                     fontWeight: FontWeight.bold,
