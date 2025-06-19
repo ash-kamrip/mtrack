@@ -19,6 +19,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   late double _amount;
   late String _description;
   late String _category;
+  late bool _excluded;
   final _formKey = GlobalKey<FormState>();
   final List<String> _categories = [
     'Food',
@@ -38,11 +39,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       _amount = widget.initialTransaction!.amount;
       _description = widget.initialTransaction!.description;
       _category = widget.initialTransaction!.category;
+      _excluded = widget.initialTransaction!.excluded;
     } else {
       _type = 'Debit';
       _amount = 0.0;
       _description = '';
       _category = '';
+      _excluded = false;
     }
   }
 
@@ -149,6 +152,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   },
                 ),
                 SizedBox(height: 16),
+                CheckboxListTile(
+                  value: _excluded,
+                  onChanged: (val) => setState(() => _excluded = val ?? false),
+                  title: Text('Exclude from analytics'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                SizedBox(height: 16),
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -192,6 +203,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                                       widget.initialTransaction != null
                                   ? widget.initialTransaction!.dateTime
                                   : DateTime.now(),
+                              excluded: _excluded,
                             ),
                           );
                         }

@@ -5,6 +5,8 @@ class Transaction {
   final String category;
   final String source;
   final DateTime dateTime;
+  // excluded from the total balance
+  final bool excluded;
 
   Transaction({
     required this.type,
@@ -13,5 +15,6 @@ class Transaction {
     required this.category,
     required this.source,
     required this.dateTime,
+    this.excluded = false,
   });
 }

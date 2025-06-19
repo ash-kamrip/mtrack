@@ -34,6 +34,7 @@ class SmsService {
             category: '',
             source: 'SMS',
             dateTime: msg.date ?? DateTime.now(),
+            excluded: false,
           ),
         );
       }

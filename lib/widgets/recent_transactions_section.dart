@@ -132,6 +132,7 @@ class RecentTransactionsSection extends StatelessWidget {
                           onEditTransaction(tx, editedTx);
                         }
                       },
+                      excluded: tx.excluded,
                     ),
                   ),
                 ],
@@ -196,6 +197,7 @@ class AllTransactionsScreen extends StatelessWidget {
                       amount: tx.amount.toInt(),
                       date: dateStr,
                       label: tx.category,
+                      excluded: tx.excluded,
                     ),
                   ),
                 ),

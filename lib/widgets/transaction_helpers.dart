@@ -18,9 +18,9 @@ List<Transaction> getCurrentMonthTransactions(List<Transaction> all) {
 }
 
 double getDebits(List<Transaction> txs) => txs
-    .where((tx) => tx.type == 'Debit')
+    .where((tx) => tx.type == 'Debit' && !tx.excluded)
     .fold<double>(0, (sum, tx) => sum + tx.amount);
 
 double getCredits(List<Transaction> txs) => txs
-    .where((tx) => tx.type == 'Credit')
+    .where((tx) => tx.type == 'Credit' && !tx.excluded)
     .fold<double>(0, (sum, tx) => sum + tx.amount);

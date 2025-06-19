@@ -147,6 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
         type: 'Debit',
         category: 'Food',
         source: 'Manual',
+        excluded: false,
       ),
     );
     final currentMonthTxs = getCurrentMonthTransactions(allTransactions);
