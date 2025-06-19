@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'transaction.dart';
 import 'transaction_item.dart';
+import 'add_transaction_dialog.dart';
 import 'package:intl/intl.dart';
 
 class RecentTransactionsSection extends StatelessWidget {
   final List<Transaction> transactions;
   final VoidCallback onAddTransaction;
+  final void Function(Transaction oldTx, Transaction newTx) onEditTransaction;
   final int? showOnlyTop;
   final TextStyle? amountTextStyle;
   final TextStyle? titleTextStyle;
@@ -15,6 +17,7 @@ class RecentTransactionsSection extends StatelessWidget {
     super.key,
     required this.transactions,
     required this.onAddTransaction,
+    required this.onEditTransaction,
     this.showOnlyTop,
     this.titleTextStyle,
     this.amountTextStyle,
@@ -117,6 +120,18 @@ class RecentTransactionsSection extends StatelessWidget {
                             fontSize: 15,
                           ),
                       verticalSpacing: verticalSpacing,
+                      onEdit: () async {
+                        final editedTx = await showDialog<Transaction>(
+                          context: context,
+                          builder: (context) => AddTransactionDialog(
+                            initialTransaction: tx,
+                            isEdit: true,
+                          ),
+                        );
+                        if (editedTx != null) {
+                          onEditTransaction(tx, editedTx);
+                        }
+                      },
                     ),
                   ),
                 ],

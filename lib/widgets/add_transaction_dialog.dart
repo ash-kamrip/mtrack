@@ -2,15 +2,23 @@ import 'package:flutter/material.dart';
 import 'transaction.dart';
 
 class AddTransactionDialog extends StatefulWidget {
+  final Transaction? initialTransaction;
+  final bool isEdit;
+  const AddTransactionDialog({
+    super.key,
+    this.initialTransaction,
+    this.isEdit = false,
+  });
+
   @override
   State<AddTransactionDialog> createState() => _AddTransactionDialogState();
 }
 
 class _AddTransactionDialogState extends State<AddTransactionDialog> {
-  String _type = 'Debit';
-  double _amount = 0.0;
-  String _description = '';
-  String _category = '';
+  late String _type;
+  late double _amount;
+  late String _description;
+  late String _category;
   final _formKey = GlobalKey<FormState>();
   final List<String> _categories = [
     'Food',
@@ -18,9 +26,25 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     'Bills',
     'Travel',
     'Salary',
-    'Other',
     'Transport',
+    'Other',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialTransaction != null) {
+      _type = widget.initialTransaction!.type;
+      _amount = widget.initialTransaction!.amount;
+      _description = widget.initialTransaction!.description;
+      _category = widget.initialTransaction!.category;
+    } else {
+      _type = 'Debit';
+      _amount = 0.0;
+      _description = '';
+      _category = '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +64,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Add New Transaction',
+                        widget.isEdit
+                            ? 'Edit Transaction'
+                            : 'Add New Transaction',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 22,
@@ -75,6 +101,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     SizedBox(width: 16),
                     Expanded(
                       child: TextFormField(
+                        initialValue: _amount != 0.0 ? _amount.toString() : '',
                         keyboardType: TextInputType.numberWithOptions(
                           decimal: true,
                         ),
@@ -84,8 +111,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                         ),
                         validator: (val) {
                           if (val == null || val.isEmpty) return 'Enter amount';
-                          if (double.tryParse(val) == null)
+                          if (double.tryParse(val) == null) {
                             return 'Invalid number';
+                          }
                           return null;
                         },
                         onSaved: (val) =>
@@ -96,6 +124,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 ),
                 SizedBox(height: 16),
                 TextFormField(
+                  initialValue: _description,
                   decoration: InputDecoration(
                     labelText: 'Description',
                     hintText: 'Enter transaction description',
@@ -158,12 +187,18 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                               description: _description,
                               category: _category,
                               source: 'Manual',
-                              dateTime: DateTime.now(),
+                              dateTime:
+                                  widget.isEdit &&
+                                      widget.initialTransaction != null
+                                  ? widget.initialTransaction!.dateTime
+                                  : DateTime.now(),
                             ),
                           );
                         }
                       },
-                      child: Text('Add Transaction'),
+                      child: Text(
+                        widget.isEdit ? 'Save Changes' : 'Add Transaction',
+                      ),
                     ),
                   ],
                 ),

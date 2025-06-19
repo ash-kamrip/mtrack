@@ -9,6 +9,7 @@ class TransactionItem extends StatelessWidget {
   final String label;
   final TextStyle? amountTextStyle;
   final double verticalSpacing;
+  final VoidCallback? onEdit;
 
   const TransactionItem({
     super.key,
@@ -20,6 +21,7 @@ class TransactionItem extends StatelessWidget {
     required this.label,
     this.amountTextStyle,
     this.verticalSpacing = 0,
+    this.onEdit,
   });
 
   Color _getLabelColor(String label) {
@@ -58,7 +60,6 @@ class TransactionItem extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: verticalSpacing / 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
-
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -127,6 +128,19 @@ class TransactionItem extends StatelessWidget {
               fontSize: 18,
             ),
           ),
+          if (onEdit != null)
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'edit' && onEdit != null) {
+                  onEdit!();
+                }
+              },
+              itemBuilder: (context) => [
+                if (onEdit != null)
+                  PopupMenuItem(value: 'edit', child: Text('Edit')),
+              ],
+            ),
         ],
       ),
     );

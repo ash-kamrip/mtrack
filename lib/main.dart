@@ -111,6 +111,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _editTransaction(Transaction oldTx, Transaction newTx) {
+    setState(() {
+      final idx = _smsTransactions.indexWhere(
+        (t) =>
+            t.dateTime == oldTx.dateTime &&
+            t.amount == oldTx.amount &&
+            t.description == oldTx.description &&
+            t.category == oldTx.category &&
+            t.type == oldTx.type,
+      );
+      if (idx != -1) {
+        _smsTransactions[idx] = newTx;
+      }
+    });
+  }
+
   void _onBottomNavChanged(int index) {
     setState(() {
       _selectedTab = index;
@@ -156,6 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 RecentTransactionsSection(
                   transactions: latest10,
                   onAddTransaction: _showAddTransactionDialog,
+                  onEditTransaction: _editTransaction,
                   showOnlyTop: 10,
                   titleTextStyle: const TextStyle(
                     fontWeight: FontWeight.bold,
