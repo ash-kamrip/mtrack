@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:mtrack/screen/all_transactions_screen.dart';
 import 'widgets/transaction.dart';
 import 'widgets/add_transaction_dialog.dart';
 import 'widgets/recent_transactions_section.dart';
 import 'screen/analytics_view.dart';
 // --- sms related imports
 import 'package:permission_handler/permission_handler.dart';
-import 'widgets/sms_service.dart';
-import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'package:logger/logger.dart';
 import 'widgets/transaction_helpers.dart';
 // --- sms related imports - END
 import 'screen/profile_screen.dart';
+import 'services/settings_service.dart';
+import 'services/transaction_storage_service.dart';
+import 'services/sms_transaction_service.dart';
+import 'services/edit_transaction_service.dart';
 
+/// Main entry point of the MTrack application.
+/// Initializes Hive and starts the app.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
@@ -21,6 +26,8 @@ void main() async {
   runApp(const MTrackApp());
 }
 
+/// Root widget of the MTrack application.
+/// Sets up the theme and initial screen.
 class MTrackApp extends StatelessWidget {
   const MTrackApp({super.key});
 
@@ -28,33 +35,38 @@ class MTrackApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MTrack',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.green,
-        fontFamily: 'Inter',
-        cardTheme: CardThemeData(
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(26),
-          ),
-        ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          iconTheme: IconThemeData(color: Colors.black),
-          titleTextStyle: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
-        ),
-      ),
+      theme: _buildAppTheme(),
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
+
+  /// Builds the app's theme configuration
+  ThemeData _buildAppTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: Colors.green,
+      fontFamily: 'Inter',
+      cardTheme: CardThemeData(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+        titleTextStyle: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+          fontSize: 22,
+        ),
+      ),
+    );
+  }
 }
 
+/// Main screen of the application with bottom navigation.
+/// Handles all transaction management and UI state.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -63,84 +75,165 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // --- SMS related variables ---
-  List<SmsMessage> messages = [];
-  final SmsService _smsService = SmsService();
-  List<Transaction> _smsTransactions = [];
+  // ==================== SERVICES ====================
   final Logger _logger = Logger();
-  // --- END SMS related variables ---
+  final SmsTransactionService _smsTransactionService = SmsTransactionService();
 
-  // --- UI State ---
+  // ==================== UI STATE ====================
   int _selectedTab = 0;
-  double _monthlySpendLimit = 0; // Default spend limit
-  // --- END UI State ---
+  double _monthlySpendLimit = 0;
+  List<Transaction> _transactions = [];
 
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
+    _requestPermissionsAndSync();
   }
 
-  // --- SMS and Permissions Logic ---
-  Future<void> _requestPermissions() async {
-    var status = await Permission.sms.request();
+  // ==================== PERMISSIONS & DATA SYNC ====================
+
+  /// Requests SMS permissions and syncs transaction data
+  Future<void> _requestPermissionsAndSync() async {
+    final status = await Permission.sms.request();
     if (status.isGranted) {
-      _readMessages();
+      await _syncTransactionsFromSms();
     } else {
-      _logger.w('Permission denied');
+      _logger.w('SMS permission denied');
     }
   }
 
-  Future<void> _readMessages() async {
-    messages = await _smsService.readMessages();
-    _smsTransactions = _smsService.parseTransactionsFromMessages(messages);
-    // Log the first 5 messages for debugging
-    for (var i = 0; i < (messages.length < 5 ? messages.length : 5); i++) {
-      final msg = messages[i];
-      _logger.i(
-        'SMS #$i: address=${msg.address}, date=${msg.date}, body=${msg.body}',
-      );
+  /// Syncs transactions from SMS messages, handling first launch vs subsequent launches
+  Future<void> _syncTransactionsFromSms() async {
+    final isFirstLaunch = await TransactionStorageService.isEmpty();
+
+    if (isFirstLaunch) {
+      await _handleFirstLaunch();
+    } else {
+      await _handleSubsequentLaunch();
     }
+
+    await _loadAndSortTransactions();
+  }
+
+  /// Handles the first launch by reading all SMS messages
+  Future<void> _handleFirstLaunch() async {
+    _logger.i('First launch: reading all SMS messages.');
+    final smsTxs = await _smsTransactionService.getAllTransactionsFromSms();
+    if (smsTxs.isNotEmpty) {
+      await TransactionStorageService.addTransactions(smsTxs);
+      await _updateLastProcessedTimestamp(smsTxs);
+    }
+  }
+
+  /// Handles subsequent launches by reading only new SMS messages
+  Future<void> _handleSubsequentLaunch() async {
+    final lastTimestamp = await SettingsService.getLastProcessedSmsTimestamp();
+    if (lastTimestamp != null) {
+      _logger.i('Reading SMS since $lastTimestamp');
+      final newSmsTxs = await _smsTransactionService
+          .getTransactionsFromSmsSince(lastTimestamp);
+      if (newSmsTxs.isNotEmpty) {
+        await TransactionStorageService.addTransactions(newSmsTxs);
+        await _updateLastProcessedTimestamp(newSmsTxs, lastTimestamp);
+      }
+    }
+  }
+
+  /// Updates the last processed SMS timestamp based on SMS transactions only
+  Future<void> _updateLastProcessedTimestamp(
+    List<Transaction> transactions, [
+    DateTime? baseTimestamp,
+  ]) async {
+    final latestSms = transactions
+        .where((t) => t.source == 'SMS')
+        .map((t) => t.dateTime)
+        .fold<DateTime?>(
+          baseTimestamp,
+          (prev, dt) => prev == null || dt.isAfter(prev) ? dt : prev,
+        );
+
+    if (latestSms != null &&
+        (baseTimestamp == null || latestSms.isAfter(baseTimestamp))) {
+      await SettingsService.setLastProcessedSmsTimestamp(latestSms);
+    }
+  }
+
+  /// Loads all transactions from Hive and sorts them by date
+  Future<void> _loadAndSortTransactions() async {
+    _transactions = await TransactionStorageService.getAllTransactions();
+    _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
     setState(() {});
   }
-  // --- END SMS and Permissions Logic ---
 
+  // ==================== TRANSACTION MANAGEMENT ====================
+
+  /// Shows dialog to add a new transaction
   void _showAddTransactionDialog() async {
     final Transaction? newTx = await showDialog<Transaction>(
       context: context,
       builder: (context) => AddTransactionDialog(),
     );
     if (newTx != null) {
+      await TransactionStorageService.addTransaction(newTx);
       setState(() {
-        _smsTransactions.insert(0, newTx);
+        _transactions.insert(0, newTx);
       });
     }
   }
 
-  void _editTransaction(Transaction oldTx, Transaction newTx) {
-    setState(() {
-      final idx = _smsTransactions.indexWhere(
-        (t) =>
-            t.dateTime == oldTx.dateTime &&
-            t.amount == oldTx.amount &&
-            t.description == oldTx.description &&
-            t.category == oldTx.category &&
-            t.type == oldTx.type,
-      );
-      if (idx != -1) {
-        _smsTransactions[idx] = newTx;
-      }
-    });
+  /// Edits an existing transaction
+  void _editTransaction(Transaction oldTx, Transaction newTx) async {
+    await EditTransactionService.editTransaction(oldTx, newTx);
+    await _loadAndSortTransactions();
   }
 
-  void _onBottomNavChanged(int index) {
-    setState(() {
-      _selectedTab = index;
-    });
+  /// Deletes a transaction with confirmation dialog
+  void _deleteTransaction(Transaction tx) async {
+    final shouldDelete = await _showDeleteConfirmationDialog(tx);
+    if (shouldDelete == true) {
+      await EditTransactionService.deleteTransaction(tx);
+      setState(() {
+        _transactions.removeWhere((transaction) => transaction.key == tx.key);
+      });
+    }
   }
 
+  /// Shows confirmation dialog for transaction deletion
+  Future<bool?> _showDeleteConfirmationDialog(Transaction tx) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Transaction'),
+        content: Text('Are you sure you want to delete "${tx.description}"?'),
+        actions: [
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          TextButton(
+            child: const Text('Delete'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== SPEND LIMIT MANAGEMENT ====================
+
+  /// Shows dialog to set or update the monthly spend limit
   Future<void> _showSetSpendLimitDialog() async {
-    final newLimit = await showDialog<double>(
+    final newLimit = await _showSpendLimitDialog();
+    if (newLimit != null) {
+      setState(() {
+        _monthlySpendLimit = newLimit;
+      });
+    }
+  }
+
+  /// Shows the spend limit input dialog
+  Future<double?> _showSpendLimitDialog() {
+    return showDialog<double>(
       context: context,
       builder: (context) {
         final controller = TextEditingController(
@@ -181,20 +274,28 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
-
-    if (newLimit != null) {
-      setState(() {
-        _monthlySpendLimit = newLimit;
-      });
-    }
   }
+
+  // ==================== UI BUILDING ====================
 
   @override
   Widget build(BuildContext context) {
-    final allTransactions = [..._smsTransactions]
-      ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
-    final latest10 = getLatestTransactions(allTransactions, count: 10);
-    // add few manual transactions
+    final colorScheme = Theme.of(context).colorScheme;
+    final latest10 = _transactions.take(10).toList();
+    final allTransactions = _getAllTransactionsWithManual();
+    final monthlyData = _calculateMonthlyData(allTransactions);
+
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      appBar: _buildAppBar(colorScheme),
+      body: _buildBody(latest10, allTransactions, monthlyData),
+      bottomNavigationBar: _buildBottomNavigationBar(),
+    );
+  }
+
+  /// Gets all transactions including the manual test transaction
+  List<Transaction> _getAllTransactionsWithManual() {
+    final allTransactions = [..._transactions];
     allTransactions.add(
       Transaction(
         amount: 100,
@@ -206,130 +307,152 @@ class _HomeScreenState extends State<HomeScreen> {
         excluded: false,
       ),
     );
-    final currentMonthTxs = getCurrentMonthTransactions(allTransactions);
-    final currentMonthDebits = getDebits(currentMonthTxs);
-    final currentMonthCredits = getCredits(currentMonthTxs);
-    final colorScheme = Theme.of(context).colorScheme;
+    return allTransactions;
+  }
 
-    Widget body;
+  /// Calculates monthly transaction data
+  Map<String, double> _calculateMonthlyData(List<Transaction> allTransactions) {
+    final currentMonthTxs = getCurrentMonthTransactions(allTransactions);
+    return {
+      'debits': getDebits(currentMonthTxs),
+      'credits': getCredits(currentMonthTxs),
+    };
+  }
+
+  /// Builds the app bar
+  PreferredSizeWidget _buildAppBar(ColorScheme colorScheme) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: CircleAvatar(
+          backgroundColor: colorScheme.primaryContainer,
+          child: Icon(Icons.account_balance_wallet, color: colorScheme.primary),
+        ),
+      ),
+      title: Text(
+        'MTrack',
+        style: TextStyle(
+          color: colorScheme.primary,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.settings),
+          color: colorScheme.primary,
+          onPressed: () {},
+          tooltip: 'Settings',
+        ),
+      ],
+    );
+  }
+
+  /// Builds the main body content based on selected tab
+  Widget _buildBody(
+    List<Transaction> latest10,
+    List<Transaction> allTransactions,
+    Map<String, double> monthlyData,
+  ) {
     switch (_selectedTab) {
       case 0:
-        body = SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                MonthlySpendsCard(
-                  currentMonthDebits: currentMonthDebits,
-                  currentMonthCredits: currentMonthCredits,
-                  monthlySpendLimit: _monthlySpendLimit,
-                ),
-                const SizedBox(height: 8),
-                SpendLimitCard(
-                  limit: _monthlySpendLimit,
-                  onSetLimit: _showSetSpendLimitDialog,
-                ),
-                const SizedBox(height: 20),
-                RecentTransactionsSection(
-                  transactions: latest10,
-                  onAddTransaction: _showAddTransactionDialog,
-                  onEditTransaction: _editTransaction,
-                  showOnlyTop: 10,
-                  titleTextStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                  amountTextStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                  verticalSpacing: 10,
-                  buttonPadding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-              ],
-            ),
-          ),
-        );
-        break;
+        return _buildHomeTab(latest10, monthlyData);
       case 1:
-        // TODO: Fix AnalyticsView to support user-selected time periods
-        body = SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: AnalyticsView(transactions: allTransactions),
-          ),
-        );
-        break;
+        return _buildAnalyticsTab(allTransactions);
       case 2:
-        body = AllTransactionsScreen(transactions: allTransactions);
-        break;
+        return AllTransactionsScreen(transactions: allTransactions);
       case 3:
-        body = const ProfileScreen();
-        break;
+        return const ProfileScreen();
       default:
-        body = Container();
+        return Container();
     }
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: CircleAvatar(
-            backgroundColor: colorScheme.primaryContainer,
-            child: Icon(
-              Icons.account_balance_wallet,
-              color: colorScheme.primary,
+  }
+
+  /// Builds the home tab content
+  Widget _buildHomeTab(
+    List<Transaction> latest10,
+    Map<String, double> monthlyData,
+  ) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            MonthlySpendsCard(
+              currentMonthDebits: monthlyData['debits']!,
+              currentMonthCredits: monthlyData['credits']!,
+              monthlySpendLimit: _monthlySpendLimit,
             ),
-          ),
+            const SizedBox(height: 8),
+            SpendLimitCard(
+              limit: _monthlySpendLimit,
+              onSetLimit: _showSetSpendLimitDialog,
+            ),
+            const SizedBox(height: 20),
+            RecentTransactionsSection(
+              transactions: latest10,
+              onAddTransaction: _showAddTransactionDialog,
+              onEditTransaction: _editTransaction,
+              onDeleteTransaction: _deleteTransaction,
+              showOnlyTop: 10,
+              titleTextStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+              amountTextStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+              verticalSpacing: 10,
+              buttonPadding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ],
         ),
-        title: Text(
-          'MTrack',
-          style: TextStyle(
-            color: colorScheme.primary,
-            fontWeight: FontWeight.bold,
-          ),
+      ),
+    );
+  }
+
+  /// Builds the analytics tab content
+  Widget _buildAnalyticsTab(List<Transaction> allTransactions) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: AnalyticsView(transactions: allTransactions),
+      ),
+    );
+  }
+
+  /// Builds the bottom navigation bar
+  Widget _buildBottomNavigationBar() {
+    return NavigationBar(
+      selectedIndex: _selectedTab,
+      onDestinationSelected: (index) => setState(() => _selectedTab = index),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home),
+          label: 'Home',
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            color: colorScheme.primary,
-            onPressed: () {},
-            tooltip: 'Settings',
-          ),
-        ],
-      ),
-      body: body,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedTab,
-        onDestinationSelected: (index) => setState(() => _selectedTab = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
-            label: 'Analytics',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.list_alt_outlined),
-            selectedIcon: Icon(Icons.list_alt),
-            label: 'Transactions',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-        height: 70,
-        backgroundColor: Colors.white,
-        indicatorColor: Colors.green.shade50,
-      ),
+        NavigationDestination(
+          icon: Icon(Icons.analytics_outlined),
+          selectedIcon: Icon(Icons.analytics),
+          label: 'Analytics',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.list_alt_outlined),
+          selectedIcon: Icon(Icons.list_alt),
+          label: 'Transactions',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.person_outline),
+          selectedIcon: Icon(Icons.person),
+          label: 'Profile',
+        ),
+      ],
+      height: 70,
+      backgroundColor: Colors.white,
+      indicatorColor: Colors.green.shade50,
     );
   }
 }

@@ -10,6 +10,7 @@ class TransactionItem extends StatelessWidget {
   final TextStyle? amountTextStyle;
   final double verticalSpacing;
   final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final bool excluded;
 
   const TransactionItem({
@@ -23,6 +24,7 @@ class TransactionItem extends StatelessWidget {
     this.amountTextStyle,
     this.verticalSpacing = 0,
     this.onEdit,
+    this.onDelete,
     this.excluded = false,
   });
 
@@ -141,17 +143,21 @@ class TransactionItem extends StatelessWidget {
                 fontSize: 18,
               ),
             ),
-            if (onEdit != null)
+            if (onEdit != null || onDelete != null)
               PopupMenuButton<String>(
                 icon: Icon(Icons.more_vert),
                 onSelected: (value) {
                   if (value == 'edit' && onEdit != null) {
                     onEdit!();
+                  } else if (value == 'delete' && onDelete != null) {
+                    onDelete!();
                   }
                 },
                 itemBuilder: (context) => [
                   if (onEdit != null)
                     PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  if (onDelete != null)
+                    PopupMenuItem(value: 'delete', child: Text('Delete')),
                 ],
               ),
           ],
