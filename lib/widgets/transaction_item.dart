@@ -89,7 +89,7 @@ class TransactionItem extends StatelessWidget {
                     title,
                     style: TextStyle(
                       fontWeight: FontWeight.normal,
-                      fontSize: 18,
+                      fontSize: 12,
                       color: excluded ? excludedText : Colors.black,
                     ),
                     maxLines: 1,
@@ -101,7 +101,7 @@ class TransactionItem extends StatelessWidget {
                         time,
                         style: TextStyle(
                           color: excluded ? excludedText : Colors.grey,
-                          fontSize: 13,
+                          fontSize: 9,
                         ),
                       ),
                       if (label.isNotEmpty)

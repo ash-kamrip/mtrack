@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'widgets/transaction.dart';
 import 'widgets/add_transaction_dialog.dart';
 import 'widgets/recent_transactions_section.dart';
@@ -12,7 +13,11 @@ import 'widgets/transaction_helpers.dart';
 // --- sms related imports - END
 import 'screen/profile_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  Hive.registerAdapter(TransactionAdapter());
+  await Hive.openBox<Transaction>('transactions');
   runApp(const MTrackApp());
 }
 
@@ -67,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- UI State ---
   int _selectedTab = 0;
+  double _monthlySpendLimit = 0; // Default spend limit
   // --- END UI State ---
 
   @override
@@ -133,6 +139,56 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _showSetSpendLimitDialog() async {
+    final newLimit = await showDialog<double>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController(
+          text: _monthlySpendLimit > 0
+              ? _monthlySpendLimit.toStringAsFixed(0)
+              : '',
+        );
+        return AlertDialog(
+          title: const Text('Set Monthly Spend Limit'),
+          content: TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              prefixText: '₹',
+              labelText: 'Limit',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Unset'),
+              onPressed: () => Navigator.of(context).pop(0.0),
+            ),
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () {
+                final value = double.tryParse(controller.text);
+                if (value != null && value > 0) {
+                  Navigator.of(context).pop(value);
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newLimit != null) {
+      setState(() {
+        _monthlySpendLimit = newLimit;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final allTransactions = [..._smsTransactions]
@@ -153,7 +209,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentMonthTxs = getCurrentMonthTransactions(allTransactions);
     final currentMonthDebits = getDebits(currentMonthTxs);
     final currentMonthCredits = getCredits(currentMonthTxs);
-    final totalDebits = getDebits(currentMonthTxs);
     final colorScheme = Theme.of(context).colorScheme;
 
     Widget body;
@@ -166,8 +221,13 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 MonthlySpendsCard(
                   currentMonthDebits: currentMonthDebits,
-                  totalDebits: totalDebits,
                   currentMonthCredits: currentMonthCredits,
+                  monthlySpendLimit: _monthlySpendLimit,
+                ),
+                const SizedBox(height: 8),
+                SpendLimitCard(
+                  limit: _monthlySpendLimit,
+                  onSetLimit: _showSetSpendLimitDialog,
                 ),
                 const SizedBox(height: 20),
                 RecentTransactionsSection(
@@ -276,18 +336,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class MonthlySpendsCard extends StatelessWidget {
   final double currentMonthDebits;
-  final double totalDebits;
   final double currentMonthCredits;
+  final double monthlySpendLimit;
+  // constructor
   const MonthlySpendsCard({
     super.key,
     required this.currentMonthDebits,
-    required this.totalDebits,
     required this.currentMonthCredits,
+    required this.monthlySpendLimit,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final bool isOverLimit =
+        currentMonthDebits > monthlySpendLimit && monthlySpendLimit > 0;
+    final indicatorColor = isOverLimit ? Colors.red : colorScheme.primary;
+
+    // Calculate net amount (credits - debits)
+    final netAmount = currentMonthCredits - currentMonthDebits;
+    final netColor = netAmount >= 0 ? Colors.green : Colors.red;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       elevation: 4,
@@ -302,7 +371,7 @@ class MonthlySpendsCard extends StatelessWidget {
                 Icon(Icons.trending_up, color: colorScheme.primary, size: 28),
                 const SizedBox(width: 8),
                 Text(
-                  'Monthly Spends',
+                  monthlySpendLimit > 0 ? 'Monthly Spends' : 'Monthly Summary',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 20,
@@ -318,29 +387,138 @@ class MonthlySpendsCard extends StatelessWidget {
                 SizedBox(
                   width: 120,
                   height: 120,
-                  child: CircularProgressIndicator(
-                    value: totalDebits == 0
-                        ? 0
-                        : (currentMonthDebits / totalDebits).clamp(0.0, 1.0),
-                    strokeWidth: 10,
-                    backgroundColor: colorScheme.surface,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      colorScheme.primary,
+                  child: Visibility(
+                    visible: monthlySpendLimit > 0,
+                    child: CircularProgressIndicator(
+                      value: monthlySpendLimit == 0
+                          ? 0
+                          : (currentMonthDebits / monthlySpendLimit).clamp(
+                              0.0,
+                              1.0,
+                            ),
+                      strokeWidth: 10,
+                      backgroundColor: colorScheme.surfaceVariant,
+                      valueColor: AlwaysStoppedAnimation<Color>(indicatorColor),
                     ),
                   ),
                 ),
-                Text(
-                  '₹${currentMonthDebits.toInt()}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 32,
-                    color: colorScheme.primary,
-                  ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      monthlySpendLimit > 0
+                          ? '₹${currentMonthDebits.toInt()}'
+                          : '₹${netAmount.toInt()}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 32,
+                        color: monthlySpendLimit > 0
+                            ? indicatorColor
+                            : netColor,
+                      ),
+                    ),
+                    if (monthlySpendLimit == 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        netAmount >= 0 ? 'Net Income' : 'Net Expense',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: netColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
+            if (monthlySpendLimit == 0) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Column(
+                    children: [
+                      Text(
+                        '₹${currentMonthCredits.toInt()}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Colors.green,
+                        ),
+                      ),
+                      const Text(
+                        'Credits',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                  Container(width: 1, height: 30, color: Colors.grey.shade300),
+                  Column(
+                    children: [
+                      Text(
+                        '₹${currentMonthDebits.toInt()}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Colors.red,
+                        ),
+                      ),
+                      const Text(
+                        'Debits',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class SpendLimitCard extends StatelessWidget {
+  final double limit;
+  final VoidCallback onSetLimit;
+
+  const SpendLimitCard({
+    super.key,
+    required this.limit,
+    required this.onSetLimit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+      elevation: 2,
+      child: ListTile(
+        leading: Icon(
+          Icons.shield_outlined,
+          color: colorScheme.secondary,
+          size: 32,
+        ),
+        title: const Text(
+          'Monthly Spend Limit',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          limit > 0 ? '₹${limit.toInt()}' : 'Not Set',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: limit > 0 ? colorScheme.primary : Colors.grey,
+          ),
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.edit_outlined),
+          onPressed: onSetLimit,
+          tooltip: 'Set Limit',
         ),
       ),
     );

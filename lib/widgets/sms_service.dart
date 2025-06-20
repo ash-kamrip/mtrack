@@ -1,5 +1,6 @@
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'transaction.dart';
+import 'package:logger/logger.dart';
 
 class SmsService {
   Future<List<SmsMessage>> readMessages() async {
@@ -14,14 +15,27 @@ class SmsService {
 
   List<Transaction> parseTransactionsFromMessages(List<SmsMessage> messages) {
     final List<Transaction> transactions = [];
-    final RegExp amountRegex = RegExp(r'Sent Rs\.?\s*([\d,]+(\.\d{1,2})?)');
-    final RegExp descRegex = RegExp(r'Tor\s+([\w\s\-&]+)');
+    final RegExp amountRegex = RegExp(
+      r'^Sent[^\d]*([\d,]+(?:\.\d{1,2})?)$',
+      caseSensitive: false,
+      multiLine: true,
+    );
+    final RegExp descRegex = RegExp(r'^To\s+(.*)$', multiLine: true);
     for (final msg in messages) {
       final body = msg.body ?? '';
       if (body.contains('Sent Rs')) {
         // Debit
         final amountMatch = amountRegex.firstMatch(body);
         final descMatch = descRegex.firstMatch(body);
+        if (messages.indexOf(msg) < 5) {
+          Logger().i('SMS body: $body');
+          Logger().i(
+            'amountMatch: ${amountMatch != null ? amountMatch.group(1) : 'null'}',
+          );
+          Logger().i(
+            'descMatch: ${descMatch != null ? descMatch.group(1) : 'null'}',
+          );
+        }
         final amount = amountMatch != null
             ? double.tryParse(amountMatch.group(1)!.replaceAll(',', '')) ?? 0.0
             : 0.0;

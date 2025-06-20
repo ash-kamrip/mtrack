@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'transaction.dart';
 
+// This class is used to add a new transaction or edit an existing transaction
 class AddTransactionDialog extends StatefulWidget {
   final Transaction? initialTransaction;
   final bool isEdit;
+  // constructor
   const AddTransactionDialog({
     super.key,
     this.initialTransaction,
