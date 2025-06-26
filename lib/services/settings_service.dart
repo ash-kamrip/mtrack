@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service for managing app settings using Hive local storage.
 /// Currently used for storing and retrieving the last processed SMS timestamp.
@@ -30,5 +31,17 @@ class SettingsService {
       _lastProcessedSmsTimestampKey,
       timestamp.millisecondsSinceEpoch,
     );
+  }
+
+  /// Gets the last processed SMS ID from SharedPreferences.
+  static Future<int?> getLastProcessedSmsId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('lastProcessedSmsId');
+  }
+
+  /// Sets the last processed SMS ID in SharedPreferences.
+  static Future<void> setLastProcessedSmsId(int id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('lastProcessedSmsId', id);
   }
 }

@@ -92,53 +92,63 @@ class RecentTransactionsSection extends StatelessWidget {
               ],
             ),
             SizedBox(height: 12),
-            ...sortedKeys.map(
-              (dateStr) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6.0),
-                    child: Text(
-                      dateStr,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  ...grouped[dateStr]!.map(
-                    (tx) => TransactionItem(
-                      isIncome: tx.type == 'Credit',
-                      title: tx.description,
-                      time: DateFormat('hh:mm a').format(tx.dateTime),
-                      amount: tx.amount.toInt(),
-                      date: dateStr,
-                      label: tx.category,
-                      amountTextStyle:
-                          amountTextStyle ??
-                          const TextStyle(
+            SizedBox(
+              height: 350, // Adjust as needed or make dynamic
+              child: ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: sortedKeys.length,
+                itemBuilder: (context, index) {
+                  final dateStr = sortedKeys[index];
+                  final txList = grouped[dateStr]!;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        child: Text(
+                          dateStr,
+                          style: const TextStyle(
+                            color: Colors.grey,
                             fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                            fontSize: 13,
                           ),
-                      verticalSpacing: verticalSpacing,
-                      onEdit: () async {
-                        final editedTx = await showDialog<Transaction>(
-                          context: context,
-                          builder: (context) => AddTransactionDialog(
-                            initialTransaction: tx,
-                            isEdit: true,
-                          ),
-                        );
-                        if (editedTx != null) {
-                          onEditTransaction(tx, editedTx);
-                        }
-                      },
-                      onDelete: () => onDeleteTransaction(tx),
-                      excluded: tx.excluded,
-                    ),
-                  ),
-                ],
+                        ),
+                      ),
+                      ...txList.map(
+                        (tx) => TransactionItem(
+                          isIncome: tx.type == 'Credit',
+                          title: tx.description,
+                          time: DateFormat('hh:mm a').format(tx.dateTime),
+                          amount: tx.amount.toInt(),
+                          date: dateStr,
+                          label: tx.category,
+                          amountTextStyle:
+                              amountTextStyle ??
+                              const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                          verticalSpacing: verticalSpacing,
+                          onEdit: () async {
+                            final editedTx = await showDialog<Transaction>(
+                              context: context,
+                              builder: (context) => AddTransactionDialog(
+                                initialTransaction: tx,
+                                isEdit: true,
+                              ),
+                            );
+                            if (editedTx != null) {
+                              onEditTransaction(tx, editedTx);
+                            }
+                          },
+                          onDelete: () => onDeleteTransaction(tx),
+                          excluded: tx.excluded,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],

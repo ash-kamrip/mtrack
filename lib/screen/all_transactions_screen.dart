@@ -2,10 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../widgets/transaction.dart';
 import '../widgets/transaction_item.dart';
+import '../widgets/add_transaction_dialog.dart';
 
 class AllTransactionsScreen extends StatelessWidget {
   final List<Transaction> transactions;
-  const AllTransactionsScreen({super.key, required this.transactions});
+  final void Function(Transaction oldTx, Transaction newTx)? onEditTransaction;
+  final void Function(Transaction tx)? onDeleteTransaction;
+  const AllTransactionsScreen({
+    super.key,
+    required this.transactions,
+    this.onEditTransaction,
+    this.onDeleteTransaction,
+  });
 
   Map<String, List<Transaction>> _groupByDate(List<Transaction> txs) {
     Map<String, List<Transaction>> grouped = {};
@@ -27,11 +35,14 @@ class AllTransactionsScreen extends StatelessWidget {
       );
     return Scaffold(
       appBar: AppBar(title: Text('All Transactions')),
-      body: ListView(
+      body: Padding(
         padding: const EdgeInsets.all(16.0),
-        children: [
-          ...sortedKeys.map(
-            (dateStr) => Column(
+        child: ListView.builder(
+          itemCount: sortedKeys.length,
+          itemBuilder: (context, index) {
+            final dateStr = sortedKeys[index];
+            final txList = grouped[dateStr]!;
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
@@ -45,7 +56,7 @@ class AllTransactionsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                ...grouped[dateStr]!.map(
+                ...txList.map(
                   (tx) => Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
                     child: TransactionItem(
@@ -56,13 +67,30 @@ class AllTransactionsScreen extends StatelessWidget {
                       date: dateStr,
                       label: tx.category,
                       excluded: tx.excluded,
+                      onEdit: onEditTransaction == null
+                          ? null
+                          : () async {
+                              final editedTx = await showDialog<Transaction>(
+                                context: context,
+                                builder: (context) => AddTransactionDialog(
+                                  initialTransaction: tx,
+                                  isEdit: true,
+                                ),
+                              );
+                              if (editedTx != null) {
+                                onEditTransaction!(tx, editedTx);
+                              }
+                            },
+                      onDelete: onDeleteTransaction == null
+                          ? null
+                          : () => onDeleteTransaction!(tx),
                     ),
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

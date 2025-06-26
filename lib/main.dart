@@ -361,7 +361,11 @@ class _HomeScreenState extends State<HomeScreen> {
       case 1:
         return _buildAnalyticsTab(allTransactions);
       case 2:
-        return AllTransactionsScreen(transactions: allTransactions);
+        return AllTransactionsScreen(
+          transactions: allTransactions,
+          onEditTransaction: _editTransaction,
+          onDeleteTransaction: _deleteTransaction,
+        );
       case 3:
         return const ProfileScreen();
       default:
