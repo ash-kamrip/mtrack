@@ -159,6 +159,24 @@ Not You? Call 18002586161/SMS BLOCK UPI to 7308080808''',
       expect(transaction.length, 0);
     });
 
+    test('should not parse SMS with Rs but no transaction data', () {
+      final smsMessage = SmsMessage(
+        id: 1,
+        description: '',
+        body: 'Your balance is Rs. 5000.00. Thank you for using our service.',
+        date: DateTime.now().millisecondsSinceEpoch,
+        type: 1,
+        amount: 0.0,
+        source: '',
+      );
+
+      final transaction = smsService.parseTransactionsFromMessages([
+        smsMessage,
+      ]);
+
+      expect(transaction.length, 0);
+    });
+
     test('should handle multiple SMS messages', () {
       final smsMessages = [
         SmsMessage(
@@ -267,6 +285,52 @@ Not You? Call 18002586161/SMS BLOCK UPI to 7308080808''',
       expect(transaction.first.type, 'Debit');
       expect(transaction.first.amount, 150.0);
       expect(transaction.first.description, 'Jayanthi A');
+    });
+
+    test('should parse credit transaction SMS', () {
+      final smsMessage = SmsMessage(
+        id: 1,
+        description: '',
+        body: '''Credit Alert!
+Rs.300.00 credited to HDFC Bank A/c xx3341 on 06-05-25 from VPA gokullkb@okicici (UPI 512656034180)''',
+        date: DateTime.now().millisecondsSinceEpoch,
+        type: 1,
+        amount: 0.0,
+        source: '',
+      );
+
+      final transaction = smsService.parseTransactionsFromMessages([
+        smsMessage,
+      ]);
+
+      expect(transaction.length, 1);
+      expect(transaction.first.type, 'Credit');
+      expect(transaction.first.amount, 300.0);
+      expect(transaction.first.description, 'gokullkb@okicici');
+    });
+
+    test('should parse credit transaction with different format', () {
+      final smsMessage = SmsMessage(
+        id: 1,
+        description: '',
+        body: '''Amount Received: Rs. 1000.00
+From: Jane Smith
+Transaction ID: TXN123456
+Date: 15-12-2024''',
+        date: DateTime.now().millisecondsSinceEpoch,
+        type: 1,
+        amount: 0.0,
+        source: '',
+      );
+
+      final transaction = smsService.parseTransactionsFromMessages([
+        smsMessage,
+      ]);
+
+      expect(transaction.length, 1);
+      expect(transaction.first.type, 'Credit');
+      expect(transaction.first.amount, 1000.0);
+      expect(transaction.first.description, 'Jane Smith');
     });
   });
 }

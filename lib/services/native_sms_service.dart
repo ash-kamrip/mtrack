@@ -89,48 +89,124 @@ class NativeSmsService {
 
   /// Parse a single SMS message into a transaction
   Transaction? _parseTransactionFromMessage(SmsMessage message) {
-    double amount = 0.0;
-    String desc = '';
-
-    final RegExp amountRegex = RegExp(
-      r'Rs\.(\d+\.\d{2})',
-      caseSensitive: false,
-    );
-
-    final RegExp descRegex = RegExp(r'^To\s+(.*)$', multiLine: true);
     final body = message.body;
-    if (body.contains('Sent Rs')) {
-      // Debit
-      final amountMatch = amountRegex.firstMatch(body);
-      final descMatch = descRegex.firstMatch(body);
-      amount = amountMatch != null
-          ? double.tryParse(amountMatch.group(1)!.replaceAll(',', '')) ?? 0.0
-          : 0.0;
-      desc = descMatch != null ? descMatch.group(1)!.trim() : 'Unknown';
-      for (var i = 0; i < 5; i++) {}
-      {
-        Logger().i('SMS body: $body');
-        Logger().i(
-          'amountMatch: ${amountMatch != null ? amountMatch.group(1) : 'null'}',
+
+    // Only process SMS that contain transaction indicators
+    if (!body.contains('Sent Rs') &&
+        !body.contains('Rs.') &&
+        !body.contains('Rs ') &&
+        !body.contains('Credit') &&
+        !body.contains('Received') &&
+        !body.contains('credited')) {
+      return null;
+    }
+
+    try {
+      double amount = 0.0;
+      String description = '';
+      String transactionType = '';
+
+      // Improved amount regex to match various formats
+      final RegExp amountRegex = RegExp(
+        r'Rs\.?\s*(\d+(?:,\d+)*(?:\.\d{1,2})?)',
+        caseSensitive: false,
+      );
+
+      // Check for debit transactions (money sent out)
+      if (body.contains('Sent Rs') || body.contains('sent Rs')) {
+        transactionType = 'Debit';
+
+        // Improved description regex to match "To" on any line
+        final RegExp descRegex = RegExp(
+          r'To\s*:?\s*([A-Za-z\s]+?)(?:\s+Rs\.|$|\n)',
+          caseSensitive: false,
+          multiLine: true,
         );
-        Logger().i(
-          'descMatch: ${descMatch != null ? descMatch.group(1) : 'null'}',
+
+        final descMatch = descRegex.firstMatch(body);
+        if (descMatch != null) {
+          description = descMatch.group(1)?.trim() ?? '';
+        }
+      }
+      // Check for credit transactions (money received)
+      else if (body.contains('Credit') ||
+          body.contains('credited') ||
+          body.contains('Received')) {
+        transactionType = 'Credit';
+
+        // Look for "From" or sender information
+        final RegExp fromRegex = RegExp(
+          r'From\s*:?\s*([A-Za-z\s]+?)(?:\s+Rs\.|$|\n)',
+          caseSensitive: false,
+          multiLine: true,
+        );
+
+        // Look for VPA/UPI sender information (like "from VPA gokullkb@okicici")
+        final RegExp vpaRegex = RegExp(
+          r'from\s+VPA\s+([^\s]+)',
+          caseSensitive: false,
+        );
+
+        // Look for general sender patterns
+        final RegExp senderRegex = RegExp(
+          r'(?:credited|received|credit)\s+(?:by|from|to)\s+([A-Za-z\s]+?)(?:\s+Rs\.|$|\n)',
+          caseSensitive: false,
+          multiLine: true,
+        );
+
+        final fromMatch = fromRegex.firstMatch(body);
+        final vpaMatch = vpaRegex.firstMatch(body);
+        final senderMatch = senderRegex.firstMatch(body);
+
+        if (vpaMatch != null) {
+          // Extract VPA/UPI ID as description
+          description = vpaMatch.group(1)?.trim() ?? '';
+        } else if (fromMatch != null) {
+          description = fromMatch.group(1)?.trim() ?? '';
+        } else if (senderMatch != null) {
+          description = senderMatch.group(1)?.trim() ?? '';
+        }
+      }
+
+      // Extract amount for both debit and credit
+      final amountMatch = amountRegex.firstMatch(body);
+      if (amountMatch != null) {
+        final amountStr = amountMatch.group(1)?.replaceAll(',', '') ?? '';
+        amount = double.tryParse(amountStr) ?? 0.0;
+      }
+
+      // Log for debugging
+      _logger.i('SMS body: $body');
+      _logger.i('Transaction type: $transactionType');
+      _logger.i(
+        'amountMatch: ${amountMatch != null ? amountMatch.group(1) : 'null'}',
+      );
+      _logger.i('Amount: $amount, Desc: $description');
+
+      // Only return transaction if we successfully parsed both amount and description
+      if (amount > 0.0 &&
+          description.isNotEmpty &&
+          transactionType.isNotEmpty) {
+        return Transaction(
+          type: transactionType,
+          amount: amount,
+          description: description,
+          category: '',
+          source: 'SMS',
+          dateTime: DateTime.fromMillisecondsSinceEpoch(message.date),
+          excluded: false,
         );
       }
-      // log the amount and desc
-      _logger.i('Amount: $amount, Desc: $desc');
+
+      // If we couldn't parse properly, return null
+      _logger.w(
+        'Failed to parse transaction from SMS: type=$transactionType, amount=$amount, desc="$description"',
+      );
+      return null;
+    } catch (e) {
+      _logger.e('Error parsing transaction from SMS: $e');
+      return null;
     }
-    final Transaction tx = Transaction(
-      type: 'Debit',
-      amount: amount,
-      description: desc,
-      category: '',
-      source: 'SMS',
-      dateTime: DateTime.fromMillisecondsSinceEpoch(message.date),
-      excluded: false,
-    );
-    // TODO: You can add more parsing for 'Credit Alert' if needed
-    return tx;
   }
 }
 
