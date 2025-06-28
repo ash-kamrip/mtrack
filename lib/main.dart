@@ -83,6 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedTab = 0;
   double _monthlySpendLimit = 0;
   List<Transaction> _transactions = [];
+  bool _isLoadingSms = false;
+  String _loadingMessage = '';
 
   @override
   void initState() {
@@ -117,25 +119,90 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Handles the first launch by reading all SMS messages
   Future<void> _handleFirstLaunch() async {
-    _logger.i('First launch: reading all SMS messages.');
-    final smsTxs = await _smsTransactionService.getAllTransactionsFromSms();
-    if (smsTxs.isNotEmpty) {
-      await TransactionStorageService.addTransactions(smsTxs);
-      await _updateLastProcessedTimestamp(smsTxs);
+    // Show loading overlay for first launch SMS reading
+    setState(() {
+      _isLoadingSms = true;
+      _loadingMessage = 'Reading your SMS inbox...';
+    });
+
+    try {
+      // Step 1: Quickly get top 10 transactions for homepage display
+      setState(() {
+        _loadingMessage = 'Finding transaction messages...';
+      });
+
+      final allSmsTxs = await _smsTransactionService
+          .getAllTransactionsFromSms();
+
+      if (allSmsTxs.isNotEmpty) {
+        setState(() {
+          _loadingMessage = 'Saving initial transactions...';
+        });
+
+        await TransactionStorageService.addTransactions(allSmsTxs);
+        await _updateLastProcessedTimestamp(allSmsTxs);
+
+        _logger.i(
+          'First launch: Synced ${allSmsTxs.length} transactions to Hive',
+        );
+      } else {
+        _logger.w('No transactions found from SMS during first launch');
+        setState(() {
+          _loadingMessage = 'No transaction messages found...';
+        });
+      }
+
+      // Step 2: Populate full database in background
+      setState(() {
+        _loadingMessage = 'Loading your dashboard...';
+      });
+
+      final top10FromHive = TransactionStorageService.getAllTransactionsSync()
+          .take(10)
+          .toList();
+
+      setState(() {
+        _transactions = top10FromHive;
+        _loadingMessage = 'Dashboard ready!';
+      });
+
+      _logger.i(
+        'First launch: Loaded ${top10FromHive.length} transactions from Hive for display',
+      );
+    } catch (e) {
+      _logger.e('Error during first launch SMS reading: $e');
+      setState(() {
+        _loadingMessage = 'Error reading SMS messages';
+      });
+    } finally {
+      // Hide loading overlay after a short delay to show the final message
+      await Future.delayed(Duration(seconds: 1));
+      setState(() {
+        _isLoadingSms = false;
+        _loadingMessage = '';
+      });
     }
   }
 
   /// Handles subsequent launches by reading only new SMS messages
   Future<void> _handleSubsequentLaunch() async {
+    _logger.i('Subsequent launch: checking for new SMS messages...');
+
     final lastTimestamp = await SettingsService.getLastProcessedSmsTimestamp();
-    if (lastTimestamp != null) {
-      _logger.i('Reading SMS since $lastTimestamp');
-      final newSmsTxs = await _smsTransactionService
-          .getTransactionsFromSmsSince(lastTimestamp);
-      if (newSmsTxs.isNotEmpty) {
-        await TransactionStorageService.addTransactions(newSmsTxs);
-        await _updateLastProcessedTimestamp(newSmsTxs, lastTimestamp);
-      }
+
+    // Use fetchSmsMessagesSince for efficient incremental sync
+    final newSmsTxs = await _smsTransactionService.getTransactionsFromSmsSince(
+      lastTimestamp!,
+    );
+
+    _logger.i('Found ${newSmsTxs.length} new SMS transactions');
+
+    if (newSmsTxs.isNotEmpty) {
+      await TransactionStorageService.addTransactions(newSmsTxs);
+      await _updateLastProcessedTimestamp(newSmsTxs, lastTimestamp);
+      _logger.i('New transactions added successfully');
+    } else {
+      _logger.i('No new transactions found since last sync');
     }
   }
 
@@ -160,12 +227,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Loads all transactions from Hive and sorts them by date
   Future<void> _loadAndSortTransactions() async {
-    _transactions = await TransactionStorageService.getAllTransactions();
+    _transactions = TransactionStorageService.getAllTransactionsSync();
     _transactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
     setState(() {});
   }
 
-  // ==================== TRANSACTION MANAGEMENT ====================
+  // ==================== EDIT TRANSACTION MANAGEMENT ====================
 
   /// Shows dialog to add a new transaction
   void _showAddTransactionDialog() async {
@@ -184,7 +251,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Edits an existing transaction
   void _editTransaction(Transaction oldTx, Transaction newTx) async {
     await EditTransactionService.editTransaction(oldTx, newTx);
-    await _loadAndSortTransactions();
+
+    // Reload all transactions
+    final updatedTransactions =
+        TransactionStorageService.getAllTransactionsSync();
+    setState(() {
+      _transactions = updatedTransactions;
+    });
   }
 
   /// Deletes a transaction with confirmation dialog
@@ -281,31 +354,69 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final latest10 = _transactions.take(10).toList();
     final allTransactions = _getAllTransactionsWithManual();
+    final latest10 = allTransactions.take(10).toList();
     final monthlyData = _calculateMonthlyData(allTransactions);
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: _buildAppBar(colorScheme),
-      body: _buildBody(latest10, allTransactions, monthlyData),
+      body: Stack(
+        children: [
+          _buildBody(latest10, allTransactions, monthlyData),
+          if (_isLoadingSms) _buildLoadingOverlay(),
+        ],
+      ),
       bottomNavigationBar: _buildBottomNavigationBar(),
+    );
+  }
+
+  /// Builds the loading overlay for first launch SMS reading
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black54,
+      child: Center(
+        child: Card(
+          margin: EdgeInsets.all(32),
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
+                SizedBox(height: 24),
+                Text(
+                  'First Time Setup',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  _loadingMessage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'This may take a few moments...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   /// Gets all transactions including the manual test transaction
   List<Transaction> _getAllTransactionsWithManual() {
-    final allTransactions = [..._transactions];
-    allTransactions.add(
-      Transaction(
-        amount: 100,
-        dateTime: DateTime.now(),
-        description: 'Manual Transaction',
-        type: 'Debit',
-        category: 'Food',
-        source: 'Manual',
-        excluded: false,
-      ),
+    // Load all transactions from Hive storage
+    final allTransactions = TransactionStorageService.getAllTransactionsSync();
+    _logger.i(
+      'Loaded ${allTransactions.length} transactions from Hive for all transactions screen',
     );
     return allTransactions;
   }

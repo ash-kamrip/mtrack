@@ -3,14 +3,30 @@ import '../widgets/transaction.dart';
 
 class TransactionStorageService {
   static const String _boxName = 'transactions';
+  static Box<Transaction>? _cachedBox;
 
   static Future<Box<Transaction>> openBox() async {
-    return await Hive.openBox<Transaction>(_boxName);
+    if (_cachedBox == null || !_cachedBox!.isOpen) {
+      _cachedBox = await Hive.openBox<Transaction>(_boxName);
+    }
+    return _cachedBox!;
   }
 
   static Future<List<Transaction>> getAllTransactions() async {
     final box = await openBox();
     return box.values.toList();
+  }
+
+  // Synchronous method to get all transactions (requires box to be already opened)
+  static List<Transaction> getAllTransactionsSync() {
+    if (_cachedBox == null || !_cachedBox!.isOpen) {
+      // If box is not open, return empty list
+      return [];
+    }
+    final allTransactions = _cachedBox!.values.toList();
+    // Sort by date descending (newest first)
+    allTransactions.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    return allTransactions;
   }
 
   // Get only the latest N transactions, sorted by date descending

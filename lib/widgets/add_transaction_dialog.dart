@@ -30,6 +30,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     'Travel',
     'Salary',
     'Transport',
+    'SMS',
     'Other',
   ];
 
