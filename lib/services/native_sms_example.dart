@@ -1,6 +1,6 @@
 import 'native_sms_service.dart';
 import '../widgets/transaction.dart';
-import 'transaction_storage_service.dart';
+import 'hive_services.dart';
 import 'settings_service.dart';
 import 'package:logger/logger.dart';
 
@@ -8,19 +8,6 @@ import 'package:logger/logger.dart';
 class NativeSmsExample {
   final NativeSmsService _nativeSmsService = NativeSmsService();
   final Logger _logger = Logger();
-
-  /// Example: Get top 10 transaction SMS messages
-  Future<List<Transaction>> getTop10TransactionSms() async {
-    //TODO: these 10 txs are not from sms, they are from the db
-    return [];
-  }
-
-  /// Example: Get all SMS messages with pagination
-  Future<List<Transaction>> getAllSmsWithPagination() async {
-    //TODO: this is not implemented ,
-    // pagination doesn't work
-    return [];
-  }
 
   /// Example: Get new SMS messages since last sync
   Future<List<Transaction>> getNewSmsSinceLastSync() async {

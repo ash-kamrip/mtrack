@@ -1,5 +1,5 @@
 import '../widgets/transaction.dart';
-import 'transaction_storage_service.dart';
+import 'hive_services.dart';
 
 /// Service for editing and deleting existing transactions in Hive.
 class EditTransactionService {

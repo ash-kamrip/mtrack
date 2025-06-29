@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mtrack/services/native_sms_service.dart';
-import 'package:mtrack/widgets/transaction.dart';
 
 void main() {
   group('SMS Parsing Tests', () {

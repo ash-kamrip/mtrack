@@ -6,6 +6,8 @@ class AddTransactionDialog extends StatefulWidget {
   final Transaction? initialTransaction;
   final bool isEdit;
   // constructor
+  // why  ?
+
   const AddTransactionDialog({
     super.key,
     this.initialTransaction,

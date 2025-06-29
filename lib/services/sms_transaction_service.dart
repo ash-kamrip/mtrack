@@ -7,12 +7,6 @@ class SmsTransactionService {
   final NativeSmsService _nativeSmsService = NativeSmsService();
   final Logger _logger = Logger();
 
-  /// Get top 10 transactions from SMS for quick display
-  Future<List<Transaction>> getTop10Tx() async {
-    //TODO: these 10 txs are not from sms, they are from the db
-    return [];
-  }
-
   /// Get all transactions from SMS
   Future<List<Transaction>> getAllTransactionsFromSms() async {
     try {
