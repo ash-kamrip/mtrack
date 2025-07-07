@@ -16,6 +16,7 @@ class _AnalyticsViewState extends State<AnalyticsView> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -73,91 +74,79 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     );
   }
 
-  Widget _buildSpendingTrendCard() {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Monthly Spending Trend',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
-            ),
-            SizedBox(height: 16),
-            SizedBox(height: 220, child: LineChart(_buildLineChartData())),
-          ],
-        ),
-      ),
-    );
+  int? _touchedBarIndex;
+  List<String> _barLabels = [];
+  List<double> _barValues = [];
+  // No loading state needed
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBarChartData();
   }
 
-  LineChartData _buildLineChartData() {
-    // Dummy data for 6 months
-    final months = [
-      'Jan 2025',
-      'Feb 2025',
-      'Mar 2025',
-      'Apr 2025',
-      'May 2025',
-      'Jun 2025',
-    ];
-    final values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-    for (var tx in widget.transactions) {
-      if (tx.type == 'Debit') {
-        final idx = months.indexWhere(
-          (m) => m.contains(_monthYear(tx.dateTime)),
-        );
-        if (idx != -1) values[idx] += tx.amount;
-      }
+  // since the data needs to be calculated this is async
+  // Loads and prepares the data for the bar chart (last 6 months of spending)
+  Future<void> _loadBarChartData() async {
+    // 1. Get all transactions from the widget (not from Hive directly)
+    //    If you want live data, fetch from Hive here instead.
+    final allTx = widget.transactions;
+    final now = DateTime.now();
+    List<String> labels = [];
+    List<double> values = [];
+    // 2. Loop over the last 6 months (from oldest to newest)
+    for (int i = 5; i >= 0; i--) {
+      // a. Get the first day of the month for this slot
+      final month = DateTime(now.year, now.month - i, 1);
+      // b. Create a label (e.g., 'JAN', 'FEB', ...)
+      final label = _monthShort(month.month).toUpperCase();
+      labels.add(label);
+      // c. Filter transactions for this month, only 'Debit' and not excluded
+      final monthTx = allTx.where(
+        (tx) =>
+            tx.type == 'Debit' && // Only debit transactions
+            !tx.excluded && // Only included transactions
+            tx.dateTime.year == month.year &&
+            tx.dateTime.month == month.month,
+      );
+      // d. Sum the amounts for this month
+      final total = monthTx.fold(0.0, (sum, tx) => sum + tx.amount);
+      values.add(total);
     }
-    return LineChartData(
-      gridData: FlGridData(
-        show: true,
-        drawVerticalLine: true,
-        getDrawingHorizontalLine: (v) =>
-            FlLine(color: Colors.grey.shade300, dashArray: [5, 5]),
-        getDrawingVerticalLine: (v) =>
-            FlLine(color: Colors.grey.shade300, dashArray: [5, 5]),
-      ),
-      titlesData: FlTitlesData(
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            getTitlesWidget: (v, meta) => Text(
-              '₹${v.toInt()}',
-              style: TextStyle(fontWeight: FontWeight.bold),
+    // 3. Update the state so the chart will rebuild with new data
+    setState(() {
+      _barLabels = labels;
+      _barValues = values;
+    });
+  }
+
+  // Card showing a bar chart of monthly/weekly/custom spending trend
+  Widget _buildSpendingTrendCard() {
+    final theme = Theme.of(context);
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 4,
+      color: theme.cardColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                'Monthly Spending Trend',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
+              ),
             ),
           ),
-        ),
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            getTitlesWidget: (v, meta) => Text(
-              months[v.toInt()],
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            interval: 1,
-          ),
-        ),
-        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          SizedBox(height: 12),
+          SizedBox(height: 220, child: BarChart(_buildBarChartData())),
+        ],
       ),
-      minX: 0,
-      maxX: 5,
-      minY: 0,
-      maxY: max(4, values.reduce(max)),
-      lineBarsData: [
-        LineChartBarData(
-          spots: List.generate(6, (i) => FlSpot(i.toDouble(), values[i])),
-          isCurved: false,
-          color: Colors.blue,
-          barWidth: 2,
-          dotData: FlDotData(show: false),
-        ),
-      ],
     );
   }
 
@@ -176,6 +165,121 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     'Nov',
     'Dec',
   ][m - 1];
+
+  // Prepares the data for the bar chart (spending per range)
+  BarChartData _buildBarChartData() {
+    final count = _barLabels.length;
+    final barColor = const LinearGradient(
+      colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+    );
+    return BarChartData(
+      alignment: BarChartAlignment.spaceAround,
+      maxY: _barValues.isNotEmpty ? (_barValues.reduce(max) * 1.2) : 4,
+      minY: 0,
+      barTouchData: BarTouchData(
+        enabled: true,
+        touchTooltipData: BarTouchTooltipData(
+          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+            final value = _barValues[group.x.toInt()];
+            return BarTooltipItem(
+              '₹${value.toStringAsFixed(2)}',
+              TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            );
+          },
+        ),
+        touchCallback: (event, response) {
+          setState(() {
+            if (response != null &&
+                response.spot != null &&
+                event.isInterestedForInteractions) {
+              _touchedBarIndex = response.spot!.touchedBarGroupIndex;
+            } else {
+              _touchedBarIndex = null;
+            }
+          });
+        },
+      ),
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        getDrawingHorizontalLine: (v) =>
+            FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+      ),
+      borderData: FlBorderData(show: false),
+      titlesData: FlTitlesData(
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 48,
+            getTitlesWidget: (v, meta) => Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                v == 0
+                    ? '0'
+                    : v >= 1000
+                    ? '${(v ~/ 1000)}k'
+                    : v.toInt().toString(),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: Colors.black54,
+                ),
+                textAlign: TextAlign.right,
+              ),
+            ),
+            interval: _barValues.isNotEmpty
+                ? (_barValues.reduce(max) / 4).ceilToDouble()
+                : 1,
+          ),
+        ),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 36,
+            getTitlesWidget: (v, meta) => Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _barLabels.isNotEmpty ? _barLabels[v.toInt()] : '',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black87,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            interval: 1,
+          ),
+        ),
+        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      ),
+      barGroups: List.generate(count, (i) {
+        return BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: _barValues[i],
+              borderRadius: BorderRadius.circular(8),
+              width: 14,
+              gradient: barColor,
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: _barValues.isNotEmpty ? (_barValues.reduce(max) * 1.2) : 4,
+                color: Colors.grey.shade100,
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
 
   Widget _buildCategorySummaryCard() {
     final Map<String, double> categoryTotals = {};
@@ -197,51 +301,48 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
               'Category Summary',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
             ),
-            SizedBox(height: 16),
-            ...categoryTotals.entries.map((e) {
-              final color = colors[colorIdx++ % colors.length];
-              return Container(
-                margin: EdgeInsets.only(bottom: 12),
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(radius: 8, backgroundColor: color),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        e.key,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '₹${e.value.toInt()}',
+          ),
+          SizedBox(height: 16),
+          ...categoryTotals.entries.map((e) {
+            final color = colors[colorIdx++ % colors.length];
+            return Container(
+              margin: EdgeInsets.only(bottom: 12),
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(radius: 8, backgroundColor: color),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      e.key,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                        fontSize: 18,
                       ),
                     ),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
+                  ),
+                  Text(
+                    '₹${e.value.toInt()}',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -268,46 +369,46 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
               'Overall Spending by Category',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
             ),
-            SizedBox(height: 16),
-            SizedBox(
-              height: 220,
-              child: PieChart(
-                PieChartData(
-                  sections: categoryTotals.entries.map((e) {
-                    final color = colors[colorIdx++ % colors.length];
-                    final percent = total == 0
-                        ? 0
-                        : (e.value / total * 100).round();
-                    return PieChartSectionData(
-                      color: color,
-                      value: e.value,
-                      title: percent > 0 ? '${e.key} $percent%' : '',
-                      titleStyle: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: color == Colors.orange
-                            ? Colors.white
-                            : Colors.black,
-                      ),
-                      radius: 60,
-                    );
-                  }).toList(),
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 0,
-                ),
+          ),
+          SizedBox(height: 16),
+          SizedBox(
+            height: 220,
+            child: PieChart(
+              PieChartData(
+                sections: categoryTotals.entries.map((e) {
+                  final color = colors[colorIdx++ % colors.length];
+                  final percent = total == 0
+                      ? 0
+                      : (e.value / total * 100).round();
+                  return PieChartSectionData(
+                    color: color,
+                    value: e.value,
+                    title: percent > 0 ? '${e.key} $percent%' : '',
+                    titleStyle: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: color == Colors.orange
+                          ? Colors.white
+                          : Colors.black,
+                    ),
+                    radius: 60,
+                  );
+                }).toList(),
+                sectionsSpace: 2,
+                centerSpaceRadius: 0,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

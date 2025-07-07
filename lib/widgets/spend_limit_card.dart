@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Widget that displays the monthly spend limit with an option to edit it.
+/// Widget for displaying and managing monthly spend limit
 class SpendLimitCard extends StatelessWidget {
   final double limit;
   final VoidCallback onSetLimit;

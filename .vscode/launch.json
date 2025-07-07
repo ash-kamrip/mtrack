@@ -8,7 +8,6 @@
             "name": "debug",
             "request": "launch",
             "type": "dart",
-            "deviceId": "emulator-5554"
         },
         {
             "name": "debug-real",
