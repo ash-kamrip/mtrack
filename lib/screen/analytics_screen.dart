@@ -16,7 +16,6 @@ class _AnalyticsViewState extends State<AnalyticsView> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -42,9 +41,16 @@ class _AnalyticsViewState extends State<AnalyticsView> {
 
   Widget _buildTabButton(String label, int index) {
     final isSelected = _selectedTab == index;
+
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _selectedTab = index),
+        onTap: () {
+          // when you tap on a button it should set the value on a variable
+          // based on this variable we perform calculations
+          setState(() => _selectedTab = index);
+          // Always reload bar chart data when tab changes
+          _loadBarChartData();
+        },
         child: Container(
           padding: EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
@@ -85,8 +91,8 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     _loadBarChartData();
   }
 
+  // Loads and prepares the data for the bar chart (last 6 months or 6 weeks of spending)
   // since the data needs to be calculated this is async
-  // Loads and prepares the data for the bar chart (last 6 months of spending)
   Future<void> _loadBarChartData() async {
     // 1. Get all transactions from the widget (not from Hive directly)
     //    If you want live data, fetch from Hive here instead.
@@ -94,26 +100,42 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     final now = DateTime.now();
     List<String> labels = [];
     List<double> values = [];
-    // 2. Loop over the last 6 months (from oldest to newest)
-    for (int i = 5; i >= 0; i--) {
-      // a. Get the first day of the month for this slot
-      final month = DateTime(now.year, now.month - i, 1);
-      // b. Create a label (e.g., 'JAN', 'FEB', ...)
-      final label = _monthShort(month.month).toUpperCase();
-      labels.add(label);
-      // c. Filter transactions for this month, only 'Debit' and not excluded
-      final monthTx = allTx.where(
-        (tx) =>
-            tx.type == 'Debit' && // Only debit transactions
-            !tx.excluded && // Only included transactions
-            tx.dateTime.year == month.year &&
-            tx.dateTime.month == month.month,
-      );
-      // d. Sum the amounts for this month
-      final total = monthTx.fold(0.0, (sum, tx) => sum + tx.amount);
-      values.add(total);
+    if (_selectedTab == 0) {
+      // Weekly: show last 6 weeks (each bar = 1 week)
+      for (int i = 5; i >= 0; i--) {
+        final weekStart = now.subtract(Duration(days: now.weekday - 1 + i * 7));
+        final weekEnd = weekStart.add(Duration(days: 6));
+        final label = '${weekStart.day}/${weekStart.month}';
+        labels.add(label);
+        final weekTx = allTx.where(
+          (tx) =>
+              tx.type == 'Debit' &&
+              !tx.excluded &&
+              tx.dateTime.isAfter(
+                weekStart.subtract(const Duration(seconds: 1)),
+              ) &&
+              tx.dateTime.isBefore(weekEnd.add(const Duration(days: 1))),
+        );
+        final total = weekTx.fold(0.0, (sum, tx) => sum + tx.amount);
+        values.add(total);
+      }
+    } else {
+      // Monthly: show last 6 months (each bar = 1 month)
+      for (int i = 5; i >= 0; i--) {
+        final month = DateTime(now.year, now.month - i, 1);
+        final label = _monthShort(month.month).toUpperCase();
+        labels.add(label);
+        final monthTx = allTx.where(
+          (tx) =>
+              tx.type == 'Debit' &&
+              !tx.excluded &&
+              tx.dateTime.year == month.year &&
+              tx.dateTime.month == month.month,
+        );
+        final total = monthTx.fold(0.0, (sum, tx) => sum + tx.amount);
+        values.add(total);
+      }
     }
-    // 3. Update the state so the chart will rebuild with new data
     setState(() {
       _barLabels = labels;
       _barValues = values;
@@ -166,7 +188,7 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     'Dec',
   ][m - 1];
 
-  // Prepares the data for the bar chart (spending per range)
+  // displays the data for the bar chart (spending per range)
   BarChartData _buildBarChartData() {
     final count = _barLabels.length;
     final barColor = const LinearGradient(
