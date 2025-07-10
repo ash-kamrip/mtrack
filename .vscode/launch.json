@@ -13,7 +13,7 @@
             "name": "debug-real",
             "request": "launch",
             "type": "dart",
-            "deviceId": "RMX3031"
+            "deviceId": "adb-TWGQJBV4QOV8MRUG-Jgrca3._adb-tls-connect._tcp"
         },
         {
             "name": "profile",

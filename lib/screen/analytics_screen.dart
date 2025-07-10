@@ -31,8 +31,8 @@ class _AnalyticsViewState extends State<AnalyticsView> {
         ),
         SizedBox(height: 20),
         _buildSpendingTrendCard(),
-        SizedBox(height: 20),
-        _buildCategorySummaryCard(),
+        // SizedBox(height: 20),
+        // _buildCategorySummaryCard(),
         SizedBox(height: 20),
         _buildPieChartCard(),
       ],
@@ -81,6 +81,7 @@ class _AnalyticsViewState extends State<AnalyticsView> {
   }
 
   int? _touchedBarIndex;
+  int? _selectedBarIndex;
   List<String> _barLabels = [];
   List<double> _barValues = [];
   // No loading state needed
@@ -145,29 +146,40 @@ class _AnalyticsViewState extends State<AnalyticsView> {
   // Card showing a bar chart of monthly/weekly/custom spending trend
   Widget _buildSpendingTrendCard() {
     final theme = Theme.of(context);
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      elevation: 4,
-      color: theme.cardColor,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                'Monthly Spending Trend',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        // Clear bar selection when tapping outside the chart
+        setState(() {
+          _selectedBarIndex = null;
+        });
+      },
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 4,
+        color: theme.cardColor,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  _selectedTab == 0
+                      ? 'Weekly Category Summary'
+                      : 'Monthly Category Summary',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
                 ),
               ),
             ),
-          ),
-          SizedBox(height: 12),
-          SizedBox(height: 220, child: BarChart(_buildBarChartData())),
-        ],
+            SizedBox(height: 12),
+            SizedBox(height: 220, child: BarChart(_buildBarChartData())),
+          ],
+        ),
       ),
     );
   }
@@ -196,12 +208,18 @@ class _AnalyticsViewState extends State<AnalyticsView> {
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
     );
+    final selectedBarColor = const LinearGradient(
+      colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+    );
     return BarChartData(
       alignment: BarChartAlignment.spaceAround,
       maxY: _barValues.isNotEmpty ? (_barValues.reduce(max) * 1.2) : 4,
       minY: 0,
       barTouchData: BarTouchData(
         enabled: true,
+        handleBuiltInTouches: false,
         touchTooltipData: BarTouchTooltipData(
           getTooltipItem: (group, groupIndex, rod, rodIndex) {
             final value = _barValues[group.x.toInt()];
@@ -216,15 +234,24 @@ class _AnalyticsViewState extends State<AnalyticsView> {
           },
         ),
         touchCallback: (event, response) {
-          setState(() {
-            if (response != null &&
-                response.spot != null &&
-                event.isInterestedForInteractions) {
-              _touchedBarIndex = response.spot!.touchedBarGroupIndex;
-            } else {
-              _touchedBarIndex = null;
-            }
-          });
+          if (event is FlTapUpEvent &&
+              response != null &&
+              response.spot != null) {
+            setState(() {
+              _selectedBarIndex = response.spot!.touchedBarGroupIndex;
+            });
+          }
+          if (event is FlLongPressEnd ||
+              event is FlPanEndEvent ||
+              event is FlTapCancelEvent) {
+            // Do nothing, keep selection
+          }
+          if (event is FlTapUpEvent && response == null) {
+            // Tapped on empty space inside chart, clear selection
+            setState(() {
+              _selectedBarIndex = null;
+            });
+          }
         },
       ),
       gridData: FlGridData(
@@ -256,7 +283,7 @@ class _AnalyticsViewState extends State<AnalyticsView> {
               ),
             ),
             interval: _barValues.isNotEmpty
-                ? (_barValues.reduce(max) / 4).ceilToDouble()
+                ? max(1, (_barValues.reduce(max) / 4).ceilToDouble())
                 : 1,
           ),
         ),
@@ -290,7 +317,10 @@ class _AnalyticsViewState extends State<AnalyticsView> {
               toY: _barValues[i],
               borderRadius: BorderRadius.circular(8),
               width: 14,
-              gradient: barColor,
+              gradient: _selectedBarIndex == i ? selectedBarColor : barColor,
+              borderSide: _selectedBarIndex == i
+                  ? BorderSide(color: Color(0xFF2563EB), width: 2)
+                  : BorderSide.none,
               backDrawRodData: BackgroundBarChartRodData(
                 show: true,
                 toY: _barValues.isNotEmpty ? (_barValues.reduce(max) * 1.2) : 4,
@@ -303,80 +333,236 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     );
   }
 
-  Widget _buildCategorySummaryCard() {
-    final Map<String, double> categoryTotals = {};
-    for (var tx in widget.transactions) {
-      if (tx.type == 'Debit') {
-        categoryTotals[tx.category] =
-            (categoryTotals[tx.category] ?? 0) + tx.amount;
-      }
-    }
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.red,
-      Colors.brown,
-    ];
-    int colorIdx = 0;
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      elevation: 2,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              'Category Summary',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
-            ),
-          ),
-          SizedBox(height: 16),
-          ...categoryTotals.entries.map((e) {
-            final color = colors[colorIdx++ % colors.length];
-            return Container(
-              margin: EdgeInsets.only(bottom: 12),
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(radius: 8, backgroundColor: color),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      e.key,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '₹${e.value.toInt()}',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
+  // Card showing a summary of spending by category for the selected period (last 6 weeks or 6 months)
+  // Widget _buildCategorySummaryCard() {
+  //   final allTx = widget.transactions;
+  //   final now = DateTime.now();
+  //   final Map<String, double> categoryTotals = {};
+  //   // If a bar is selected, show summary for that period only
+  //   if (_selectedBarIndex != null) {
+  //     if (_selectedTab == 0) {
+  //       // Weekly: get the week for the selected bar
+  //       final weekStart = now.subtract(
+  //         Duration(days: now.weekday - 1 + (5 - _selectedBarIndex!) * 7),
+  //       );
+  //       final weekEnd = weekStart.add(Duration(days: 6));
+  //       final weekTx = allTx.where(
+  //         (tx) =>
+  //             tx.type == 'Debit' &&
+  //             !tx.excluded &&
+  //             tx.dateTime.isAfter(
+  //               weekStart.subtract(const Duration(seconds: 1)),
+  //             ) &&
+  //             tx.dateTime.isBefore(weekEnd.add(const Duration(days: 1))),
+  //       );
+  //       for (var tx in weekTx) {
+  //         categoryTotals[tx.category] =
+  //             (categoryTotals[tx.category] ?? 0) + tx.amount;
+  //       }
+  //     } else {
+  //       // Monthly: get the month for the selected bar
+  //       final month = DateTime(
+  //         now.year,
+  //         now.month - (5 - _selectedBarIndex!),
+  //         1,
+  //       );
+  //       final monthTx = allTx.where(
+  //         (tx) =>
+  //             tx.type == 'Debit' &&
+  //             !tx.excluded &&
+  //             tx.dateTime.year == month.year &&
+  //             tx.dateTime.month == month.month,
+  //       );
+  //       for (var tx in monthTx) {
+  //         categoryTotals[tx.category] =
+  //             (categoryTotals[tx.category] ?? 0) + tx.amount;
+  //       }
+  //     }
+  //   } else {
+  //     if (_selectedTab == 0) {
+  //       // Weekly: sum for last 6 weeks
+  //       final weekStart = now.subtract(Duration(days: now.weekday - 1 + 5 * 7));
+  //       final weekEnd = now;
+  //       final weekTx = allTx.where(
+  //         (tx) =>
+  //             tx.type == 'Debit' &&
+  //             !tx.excluded &&
+  //             tx.dateTime.isAfter(
+  //               weekStart.subtract(const Duration(seconds: 1)),
+  //             ) &&
+  //             tx.dateTime.isBefore(weekEnd.add(const Duration(days: 1))),
+  //       );
+  //       for (var tx in weekTx) {
+  //         categoryTotals[tx.category] =
+  //             (categoryTotals[tx.category] ?? 0) + tx.amount;
+  //       }
+  //     } else {
+  //       // Monthly: sum for last 6 months
+  //       final monthStart = DateTime(now.year, now.month - 5, 1);
+  //       final monthEnd = now;
+  //       final monthTx = allTx.where(
+  //         (tx) =>
+  //             tx.type == 'Debit' &&
+  //             !tx.excluded &&
+  //             tx.dateTime.isAfter(
+  //               monthStart.subtract(const Duration(seconds: 1)),
+  //             ) &&
+  //             tx.dateTime.isBefore(monthEnd.add(const Duration(days: 1))),
+  //       );
+  //       for (var tx in monthTx) {
+  //         categoryTotals[tx.category] =
+  //             (categoryTotals[tx.category] ?? 0) + tx.amount;
+  //       }
+  //     }
+  //   }
+  //   final colors = [
+  //     Colors.blue,
+  //     Colors.green,
+  //     Colors.orange,
+  //     Colors.purple,
+  //     Colors.red,
+  //     Colors.brown,
+  //   ];
+  //   int colorIdx = 0;
+  //   return Card(
+  //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+  //     elevation: 2,
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Padding(
+  //           padding: const EdgeInsets.all(16.0),
+  //           child: Text(
+  //             _selectedTab == 0
+  //                 ? 'Weekly Category Summary'
+  //                 : 'Monthly Category Summary',
+  //             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+  //           ),
+  //         ),
+  //         SizedBox(height: 16),
+  //         ...categoryTotals.entries.map((e) {
+  //           final color = colors[colorIdx++ % colors.length];
+  //           // If the category is null, empty, or whitespace, show 'Uncategorized'
+  //           final categoryLabel = (e.key == null || e.key.trim().isEmpty)
+  //               ? 'Uncategorized'
+  //               : e.key;
+  //           return Container(
+  //             margin: EdgeInsets.only(bottom: 12),
+  //             padding: EdgeInsets.all(16),
+  //             decoration: BoxDecoration(
+  //               color: Colors.grey[100],
+  //               borderRadius: BorderRadius.circular(16),
+  //             ),
+  //             child: Row(
+  //               children: [
+  //                 CircleAvatar(radius: 8, backgroundColor: color),
+  //                 SizedBox(width: 16),
+  //                 Expanded(
+  //                   child: Text(
+  //                     categoryLabel,
+  //                     style: TextStyle(
+  //                       fontWeight: FontWeight.bold,
+  //                       fontSize: 18,
+  //                     ),
+  //                   ),
+  //                 ),
+  //                 Text(
+  //                   '₹${e.value.toInt()}',
+  //                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+  //                 ),
+  //               ],
+  //             ),
+  //           );
+  //         }),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Widget _buildPieChartCard() {
+    final allTx = widget.transactions;
+    final now = DateTime.now();
     final Map<String, double> categoryTotals = {};
     double total = 0;
-    for (var tx in widget.transactions) {
-      if (tx.type == 'Debit') {
-        categoryTotals[tx.category] =
-            (categoryTotals[tx.category] ?? 0) + tx.amount;
-        total += tx.amount;
+    // If a bar is selected, show summary for that period only
+    if (_selectedBarIndex != null) {
+      if (_selectedTab == 0) {
+        // Weekly: get the week for the selected bar
+        final weekStart = now.subtract(
+          Duration(days: now.weekday - 1 + (5 - _selectedBarIndex!) * 7),
+        );
+        final weekEnd = weekStart.add(Duration(days: 6));
+        final weekTx = allTx.where(
+          (tx) =>
+              tx.type == 'Debit' &&
+              !tx.excluded &&
+              tx.dateTime.isAfter(
+                weekStart.subtract(const Duration(seconds: 1)),
+              ) &&
+              tx.dateTime.isBefore(weekEnd.add(const Duration(days: 1))),
+        );
+        for (var tx in weekTx) {
+          categoryTotals[tx.category] =
+              (categoryTotals[tx.category] ?? 0) + tx.amount;
+          total += tx.amount;
+        }
+      } else {
+        // Monthly: get the month for the selected bar
+        final month = DateTime(
+          now.year,
+          now.month - (5 - _selectedBarIndex!),
+          1,
+        );
+        final monthTx = allTx.where(
+          (tx) =>
+              tx.type == 'Debit' &&
+              !tx.excluded &&
+              tx.dateTime.year == month.year &&
+              tx.dateTime.month == month.month,
+        );
+        for (var tx in monthTx) {
+          categoryTotals[tx.category] =
+              (categoryTotals[tx.category] ?? 0) + tx.amount;
+          total += tx.amount;
+        }
+      }
+    } else {
+      if (_selectedTab == 0) {
+        // Weekly: sum for last 6 weeks
+        final weekStart = now.subtract(Duration(days: now.weekday - 1 + 5 * 7));
+        final weekEnd = now;
+        final weekTx = allTx.where(
+          (tx) =>
+              tx.type == 'Debit' &&
+              !tx.excluded &&
+              tx.dateTime.isAfter(
+                weekStart.subtract(const Duration(seconds: 1)),
+              ) &&
+              tx.dateTime.isBefore(weekEnd.add(const Duration(days: 1))),
+        );
+        for (var tx in weekTx) {
+          categoryTotals[tx.category] =
+              (categoryTotals[tx.category] ?? 0) + tx.amount;
+          total += tx.amount;
+        }
+      } else {
+        // Monthly: sum for last 6 months
+        final monthStart = DateTime(now.year, now.month - 5, 1);
+        final monthEnd = now;
+        final monthTx = allTx.where(
+          (tx) =>
+              tx.type == 'Debit' &&
+              !tx.excluded &&
+              tx.dateTime.isAfter(
+                monthStart.subtract(const Duration(seconds: 1)),
+              ) &&
+              tx.dateTime.isBefore(monthEnd.add(const Duration(days: 1))),
+        );
+        for (var tx in monthTx) {
+          categoryTotals[tx.category] =
+              (categoryTotals[tx.category] ?? 0) + tx.amount;
+          total += tx.amount;
+        }
       }
     }
     final colors = [
@@ -408,26 +594,81 @@ class _AnalyticsViewState extends State<AnalyticsView> {
               PieChartData(
                 sections: categoryTotals.entries.map((e) {
                   final color = colors[colorIdx++ % colors.length];
+                  final categoryLabel = (e.key == null || e.key.trim().isEmpty)
+                      ? 'Uncategorized'
+                      : e.key;
                   final percent = total == 0
                       ? 0
                       : (e.value / total * 100).round();
                   return PieChartSectionData(
                     color: color,
                     value: e.value,
-                    title: percent > 0 ? '${e.key} $percent%' : '',
+                    title: '$percent%', // No text inside the pie
+                    titlePositionPercentageOffset: 1.2,
                     titleStyle: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: color == Colors.orange
-                          ? Colors.white
-                          : Colors.black,
+                      color: Colors.black,
+                      // color: color == Colors.orange
+                      //     ? Colors.white
+                      //     : Colors.black,
                     ),
-                    radius: 60,
+                    radius: 80,
                   );
                 }).toList(),
                 sectionsSpace: 2,
                 centerSpaceRadius: 0,
               ),
+            ),
+          ),
+          // Improved custom legend below the pie chart
+          Padding(
+            padding: const EdgeInsets.only(
+              top: 24.0,
+              left: 16.0,
+              right: 16.0,
+              bottom: 8.0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: categoryTotals.entries.map((e) {
+                final color =
+                    colors[(categoryTotals.keys.toList().indexOf(e.key)) %
+                        colors.length];
+                final categoryLabel = (e.key == null || e.key.trim().isEmpty)
+                    ? 'Uncategorized'
+                    : e.key;
+                final percent = total == 0
+                    ? 0
+                    : (e.value / total * 100).round();
+                final catValue = e.value.toInt();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        margin: EdgeInsets.only(right: 10),
+                        child: Icon(Icons.label, color: color, size: 22),
+                      ),
+                      Expanded(
+                        child: Text(
+                          categoryLabel,
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Text(
+                        percent > 0 ? '$percent% ($catValue)' : ' ',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ],
